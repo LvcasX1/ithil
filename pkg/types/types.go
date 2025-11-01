@@ -62,6 +62,7 @@ type Chat struct {
 	AccessHash           int64      // Required for API calls to users and channels
 	UserStatus           UserStatus // Online status for private chats
 	NotificationSettings *NotificationSettings
+	HasNewMessage        bool // Indicates if chat has received a new message (for visual highlighting)
 }
 
 // ChatType represents the type of chat.

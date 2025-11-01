@@ -292,9 +292,12 @@ func (m *ChatListModel) renderAllChats() string {
 
 	var chatViews []string
 	for i, chat := range m.chats {
-		isSelected := i == m.selectedIndex && m.focused
+		// Show selection highlighting even when chat list is not focused
+		// This maintains visual indication of which chat is currently open
+		isSelected := i == m.selectedIndex
+		isFocused := m.focused
 		// Use full viewport width for chat items
-		chatItem := components.NewChatItemComponent(chat, isSelected, m.viewport.Width)
+		chatItem := components.NewChatItemComponent(chat, isSelected, isFocused, m.viewport.Width)
 		chatViews = append(chatViews, chatItem.Render())
 	}
 
@@ -421,6 +424,11 @@ func (m *ChatListModel) sortChats() {
 			return m.chats[i].IsPinned
 		}
 
+		// Then chats with new messages (HasNewMessage flag)
+		if m.chats[i].HasNewMessage != m.chats[j].HasNewMessage {
+			return m.chats[i].HasNewMessage
+		}
+
 		// Then by last message date
 		if m.chats[i].LastMessage == nil {
 			return false
@@ -430,6 +438,33 @@ func (m *ChatListModel) sortChats() {
 		}
 		return m.chats[i].LastMessage.Date.After(m.chats[j].LastMessage.Date)
 	})
+}
+
+// MoveToTop moves a chat to the top of the list (after pinned chats).
+func (m *ChatListModel) MoveToTop(chatID int64) {
+	// Find the chat and mark it with HasNewMessage
+	for i, chat := range m.chats {
+		if chat.ID == chatID {
+			m.chats[i].HasNewMessage = true
+			break
+		}
+	}
+	// Re-sort to move it to the top
+	m.sortChats()
+	m.updateViewport()
+}
+
+// ClearNewMessageFlag clears the new message flag for a chat.
+func (m *ChatListModel) ClearNewMessageFlag(chatID int64) {
+	for i, chat := range m.chats {
+		if chat.ID == chatID {
+			m.chats[i].HasNewMessage = false
+			m.cache.SetChat(m.chats[i])
+			break
+		}
+	}
+	m.sortChats()
+	m.updateViewport()
 }
 
 // Messages for chat list updates.
