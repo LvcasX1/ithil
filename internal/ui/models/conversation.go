@@ -2,6 +2,8 @@
 package models
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -360,9 +362,9 @@ func (m *ConversationModel) renderEmpty() string {
 	}
 
 	// Create custom top border with embedded title
-	title := " Conversation "
-	// Use UTF-8 rune count for accurate visual width
-	titleLen := utf8.RuneCountInString(title)
+	title := " 💬 CONVERSATION "
+	// Use lipgloss.Width() for accurate display width
+	titleLen := lipgloss.Width(title)
 
 	// Calculate remaining border width
 	// Total: "┌─" (2) + title + dashes + "┐" (1) = m.width
@@ -403,7 +405,23 @@ func (m *ConversationModel) renderEmpty() string {
 	bottomBorder := lipgloss.NewStyle().Foreground(borderColor).Render("└" + strings.Repeat("─", m.width-2) + "┘")
 
 	// Combine all parts
-	return topBorder + "\n" + strings.Join(borderedLines, "\n") + "\n" + bottomBorder
+	result := topBorder + "\n" + strings.Join(borderedLines, "\n") + "\n" + bottomBorder
+
+	// DEBUG: Log first line to see if title is there
+	f, _ := os.OpenFile("/tmp/ithil-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		firstLine := strings.Split(result, "\n")[0]
+		fmt.Fprintf(f, "Conversation renderEmpty() details:\n")
+		fmt.Fprintf(f, "  width=%d, height=%d\n", m.width, m.height)
+		fmt.Fprintf(f, "  title=%q, titleLen=%d, remainingWidth=%d\n", title, titleLen, remainingWidth)
+		fmt.Fprintf(f, "  topBorder=%q\n", topBorder)
+		fmt.Fprintf(f, "  lipgloss.Width(topBorder)=%d\n", lipgloss.Width(topBorder))
+		fmt.Fprintf(f, "  firstLine=%q\n", firstLine)
+		fmt.Fprintf(f, "  Total lines in result=%d\n\n", len(strings.Split(result, "\n")))
+		f.Close()
+	}
+
+	return result
 }
 
 // renderAllMessages renders all messages for the viewport.
@@ -583,11 +601,11 @@ func (m *ConversationModel) SetSize(width, height int) {
 	// - Viewport content with side borders: viewportHeight lines
 	// - Bottom border: 1 line
 	// - Typing indicator: 0-1 lines (reserve 1 to prevent layout shift)
-	// - Input box: 5 lines (includes its own border + padding)
-	// Total: 1 + viewportHeight + 1 + 1 + 5 = viewportHeight + 8
-	// Therefore: viewportHeight = height - 8
+	// - Input box: 4 lines (includes border only, no padding)
+	// Total: 1 + viewportHeight + 1 + 1 + 4 = viewportHeight + 7
+	// Therefore: viewportHeight = height - 7
 
-	inputHeight := 5   // Input box total height (includes border + padding)
+	inputHeight := 4   // Input box total height (border + 3 content lines)
 	borderLines := 2   // Top border (1) + Bottom border (1)
 	typingHeight := 1  // Reserve space for typing indicator to prevent overflow
 

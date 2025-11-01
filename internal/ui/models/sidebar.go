@@ -3,6 +3,7 @@ package models
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -111,8 +112,9 @@ func (m *SidebarModel) View() string {
 	viewportContent := m.viewport.View()
 
 	// Create custom top border with embedded title
-	title := " Info "
-	titleLen := len(title)
+	title := " INFO "
+	// Use lipgloss.Width() for accurate display width
+	titleLen := lipgloss.Width(title)
 
 	// Calculate remaining border width
 	// Total: "┌─" (2) + title + dashes + "┐" (1) = m.width
@@ -154,7 +156,24 @@ func (m *SidebarModel) View() string {
 	bottomBorder := lipgloss.NewStyle().Foreground(borderColor).Render("└" + strings.Repeat("─", m.width-2) + "┘")
 
 	// Combine all parts
-	return topBorder + "\n" + strings.Join(borderedLines, "\n") + "\n" + bottomBorder
+	result := topBorder + "\n" + strings.Join(borderedLines, "\n") + "\n" + bottomBorder
+
+	// DEBUG: Log first line to see if title is there
+	f, _ := os.OpenFile("/tmp/ithil-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		firstLine := strings.Split(result, "\n")[0]
+		fmt.Fprintf(f, "Sidebar View() with chat details [FIXED]:\n")
+		fmt.Fprintf(f, "  width=%d, height=%d, focused=%v\n", m.width, m.height, m.focused)
+		fmt.Fprintf(f, "  title=%q, titleLen=%d (lipgloss.Width=%d, no compensation), remainingWidth=%d\n",
+			title, titleLen, lipgloss.Width(title), remainingWidth)
+		fmt.Fprintf(f, "  topBorder=%q\n", topBorder)
+		fmt.Fprintf(f, "  lipgloss.Width(topBorder)=%d (expected=%d)\n", lipgloss.Width(topBorder), m.width)
+		fmt.Fprintf(f, "  firstLine=%q\n", firstLine)
+		fmt.Fprintf(f, "  Total lines in result=%d\n\n", len(strings.Split(result, "\n")))
+		f.Close()
+	}
+
+	return result
 }
 
 // renderEmpty renders an empty state.
@@ -199,8 +218,9 @@ func (m *SidebarModel) renderEmpty() string {
 	}
 
 	// Create custom top border with embedded title
-	title := " Info "
-	titleLen := len(title)
+	title := " INFO "
+	// Use lipgloss.Width() for accurate display width
+	titleLen := lipgloss.Width(title)
 
 	// Calculate remaining border width
 	// Total: "┌─" (2) + title + dashes + "┐" (1) = m.width
@@ -241,7 +261,24 @@ func (m *SidebarModel) renderEmpty() string {
 	bottomBorder := lipgloss.NewStyle().Foreground(borderColor).Render("└" + strings.Repeat("─", m.width-2) + "┘")
 
 	// Combine all parts
-	return topBorder + "\n" + strings.Join(borderedLines, "\n") + "\n" + bottomBorder
+	result := topBorder + "\n" + strings.Join(borderedLines, "\n") + "\n" + bottomBorder
+
+	// DEBUG: Log first line to see if title is there
+	f, _ := os.OpenFile("/tmp/ithil-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		firstLine := strings.Split(result, "\n")[0]
+		fmt.Fprintf(f, "Sidebar renderEmpty() details [FIXED]:\n")
+		fmt.Fprintf(f, "  width=%d, height=%d\n", m.width, m.height)
+		fmt.Fprintf(f, "  title=%q, titleLen=%d (lipgloss.Width=%d, no compensation), remainingWidth=%d\n",
+			title, titleLen, lipgloss.Width(title), remainingWidth)
+		fmt.Fprintf(f, "  topBorder=%q\n", topBorder)
+		fmt.Fprintf(f, "  lipgloss.Width(topBorder)=%d (expected=%d)\n", lipgloss.Width(topBorder), m.width)
+		fmt.Fprintf(f, "  firstLine=%q\n", firstLine)
+		fmt.Fprintf(f, "  Total lines in result=%d\n\n", len(strings.Split(result, "\n")))
+		f.Close()
+	}
+
+	return result
 }
 
 // renderChatInfoContent renders information about the current chat for viewport.

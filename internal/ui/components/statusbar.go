@@ -237,9 +237,8 @@ func (s *StatusBarComponent) getSeparator() string {
 // getContainerStyle returns an enhanced container style for the status bar.
 func (s *StatusBarComponent) getContainerStyle() lipgloss.Style {
 	return lipgloss.NewStyle().
-		Padding(0, 1).
 		BorderTop(true).
-		BorderStyle(lipgloss.ThickBorder()).
+		BorderStyle(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color(styles.AccentCyan)).
 		Width(s.Width)
 }

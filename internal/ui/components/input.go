@@ -55,9 +55,9 @@ func (i *InputComponent) View() string {
 	var sb strings.Builder
 
 	// Calculate available content height
-	// InputBoxStyle has: BorderTop (1) + Padding top (1) + Padding bottom (1) = 3 lines overhead
-	// Available content lines = Height - 3
-	availableLines := i.Height - 3
+	// InputBoxStyle has: BorderTop (1) = 1 line overhead
+	// Available content lines = Height - 1
+	availableLines := i.Height - 1
 	if availableLines < 1 {
 		availableLines = 1 // Always show at least the input
 	}
@@ -218,7 +218,6 @@ func (i *InputComponent) getCharacterInfo() string {
 // getContainerStyle returns the appropriate container style based on focus state.
 func (i *InputComponent) getContainerStyle() lipgloss.Style {
 	baseStyle := lipgloss.NewStyle().
-		Padding(1).
 		BorderTop(true).
 		Width(i.Width - 2).
 		Height(i.Height)
