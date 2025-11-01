@@ -15,11 +15,11 @@ import (
 
 // authFlow implements the auth.FlowClient interface for interactive authentication.
 type authFlow struct {
-	client          *Client
-	phoneNumber     string
-	phoneCodeHash   string
-	firstName       string
-	lastName        string
+	client        *Client
+	phoneNumber   string
+	phoneCodeHash string
+	firstName     string
+	lastName      string
 }
 
 // SendPhoneNumber sends the phone number for authentication.
@@ -84,9 +84,9 @@ func (c *Client) SendPhoneNumber(phoneNumber string) error {
 
 	// Save auth data for later use
 	authData := &AuthData{
-		PhoneNumber:  phoneNumber,
+		PhoneNumber:   phoneNumber,
 		PhoneCodeHash: phoneCodeHash,
-		IsRegistered: true, // We'll find out if false later
+		IsRegistered:  true, // We'll find out if false later
 	}
 
 	if err := c.sessionStorage.SaveAuthData(authData); err != nil {

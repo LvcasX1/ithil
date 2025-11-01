@@ -57,12 +57,11 @@ func (s *SessionStorage) StoreSession(ctx context.Context, data []byte) error {
 	return os.Rename(tempPath, s.path)
 }
 
-
 // AuthData stores authentication state information.
 type AuthData struct {
-	PhoneNumber  string `json:"phone_number"`
+	PhoneNumber   string `json:"phone_number"`
 	PhoneCodeHash string `json:"phone_code_hash"`
-	IsRegistered bool   `json:"is_registered"`
+	IsRegistered  bool   `json:"is_registered"`
 }
 
 // SaveAuthData saves authentication data to a separate file.

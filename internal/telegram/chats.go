@@ -145,8 +145,8 @@ func (c *Client) convertDialogs(dialogs []tg.DialogClass, chats []tg.ChatClass, 
 		if msg, ok := messageMap[int64(d.TopMessage)].(*tg.Message); ok {
 			// Create a simple Message object for the last message
 			chat.LastMessage = &types.Message{
-				ID:      int64(msg.ID),
-				ChatID:  chat.ID,
+				ID:     int64(msg.ID),
+				ChatID: chat.ID,
 				Content: types.MessageContent{
 					Type: types.MessageTypeText,
 					Text: msg.Message,

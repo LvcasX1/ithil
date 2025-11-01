@@ -27,10 +27,12 @@ type ConversationModel struct {
 	focused        bool
 	viewport       viewport.Model
 	input          *components.InputComponent
-	replyToMessage *types.Message          // Message being replied to
-	editingMessage *types.Message          // Message being edited
-	sendingMessage bool                    // Flag to show sending state
-	typingUsers    map[int64]time.Time     // userID -> when they started typing
+	replyToMessage *types.Message                   // Message being replied to
+	editingMessage *types.Message                   // Message being edited
+	sendingMessage bool                             // Flag to show sending state
+	typingUsers    map[int64]time.Time              // userID -> when they started typing
+	mediaViewer    *components.MediaViewerComponent // Media viewer modal
+	selectedMsgIdx int                              // Index of selected message for media viewing
 }
 
 // NewConversationModel creates a new conversation model.
@@ -39,12 +41,14 @@ func NewConversationModel(client *telegram.Client, cache *cache.Cache) *Conversa
 	vp.MouseWheelEnabled = false
 
 	return &ConversationModel{
-		client:        client,
-		cache:         cache,
-		messages:      []*types.Message{},
-		viewport:      vp,
-		input:         components.NewInputComponent(100, 5),
-		typingUsers:   make(map[int64]time.Time),
+		client:         client,
+		cache:          cache,
+		messages:       []*types.Message{},
+		viewport:       vp,
+		input:          components.NewInputComponent(100, 5),
+		typingUsers:    make(map[int64]time.Time),
+		mediaViewer:    components.NewMediaViewerComponent(80, 30),
+		selectedMsgIdx: -1,
 	}
 }
 
@@ -57,6 +61,19 @@ func (m *ConversationModel) Init() tea.Cmd {
 func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 	var cmd tea.Cmd
 
+	// If media viewer is visible, let it handle updates first
+	if m.mediaViewer.IsVisible() {
+		var viewerCmd tea.Cmd
+		m.mediaViewer, viewerCmd = m.mediaViewer.Update(msg)
+		if viewerCmd != nil {
+			return m, viewerCmd
+		}
+		// Check if viewer was dismissed
+		if !m.mediaViewer.IsVisible() {
+			return m, nil
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// CRITICAL: Only handle keys if this pane is focused
@@ -66,7 +83,7 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 		}
 
 		// Otherwise handle navigation keys only when pane is focused
-		if m.focused && !m.input.Focused {
+		if m.focused && !m.input.Focused && !m.mediaViewer.IsVisible() {
 			switch msg.String() {
 			case "up", "k":
 				m.viewport.LineUp(1)
@@ -107,6 +124,9 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 					}
 				}
 				return m, nil
+			case "enter":
+				// Open media viewer for last message with media
+				return m, m.openMediaViewer()
 			}
 		}
 
@@ -123,10 +143,27 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 		m.messages = msg.messages
 		m.updateViewport()
 		return m, nil
+
+	case components.MediaViewerDismissedMsg:
+		m.mediaViewer.Hide()
+		return m, nil
+
+	case components.MediaDownloadRequestMsg:
+		// Handle media download request
+		return m, m.downloadMediaForViewer(msg.Message)
+
+	case components.MediaDownloadedMsg:
+		// Pass to media viewer
+		var viewerCmd tea.Cmd
+		m.mediaViewer, viewerCmd = m.mediaViewer.Update(msg)
+		return m, viewerCmd
 	}
 
-	// Update viewport
-	m.viewport, cmd = m.viewport.Update(msg)
+	// CRITICAL: Only update viewport when this pane is focused
+	// This prevents navigation keys from affecting the viewport when the pane is not focused
+	if m.focused {
+		m.viewport, cmd = m.viewport.Update(msg)
+	}
 
 	// Only update input component if pane is focused and input is focused
 	// This prevents input from capturing keys when it shouldn't
@@ -146,6 +183,15 @@ func (m *ConversationModel) handleInputKeys(msg tea.KeyMsg) (*ConversationModel,
 		m.ClearReplyEdit()
 		m.input.Blur()
 		return m, nil
+	case "ctrl+a":
+		// Attach file - prompt for file path
+		return m, func() tea.Msg {
+			return fileAttachRequestMsg{}
+		}
+	case "ctrl+x":
+		// Remove attachment
+		m.input.ClearAttachment()
+		return m, nil
 	case "enter":
 		// Check if we're editing or sending
 		if m.editingMessage != nil {
@@ -161,10 +207,35 @@ func (m *ConversationModel) handleInputKeys(msg tea.KeyMsg) (*ConversationModel,
 
 // View renders the conversation model.
 func (m *ConversationModel) View() string {
+	// Render base content
+	var baseView string
 	if m.currentChat == nil {
-		return m.renderEmpty()
+		baseView = m.renderEmpty()
+	} else {
+		baseView = m.renderConversationView()
 	}
 
+	// If media viewer is visible, overlay it
+	if m.mediaViewer.IsVisible() {
+		viewerView := m.mediaViewer.View()
+		// Center the media viewer
+		overlay := lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			viewerView,
+			lipgloss.WithWhitespaceChars(" "),
+			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
+		)
+		return overlay
+	}
+
+	return baseView
+}
+
+// renderConversationView renders the main conversation view.
+func (m *ConversationModel) renderConversationView() string {
 	// Typing indicator
 	typingView := m.renderTypingIndicator()
 
@@ -174,13 +245,11 @@ func (m *ConversationModel) View() string {
 
 	if m.focused {
 		borderColor = lipgloss.Color(styles.BorderFocused)
-		titleColor = lipgloss.Color(styles.TextBright)
+		titleColor = lipgloss.Color(styles.AccentCyan)
 	} else {
 		borderColor = lipgloss.Color(styles.BorderNormal)
-		titleColor = lipgloss.Color(styles.TextSecondary)
+		titleColor = lipgloss.Color(styles.TextBright)
 	}
-
-	// Calculate heights (we don't need viewportContentHeight since viewport manages its own content)
 
 	// Get viewport content
 	viewportContent := m.viewport.View()
@@ -191,7 +260,7 @@ func (m *ConversationModel) View() string {
 	titleLen := utf8.RuneCountInString(title)
 
 	// Truncate title if too long
-	maxTitleLen := m.width - 6  // Reserve space for "┌─", "─┐", and some dashes
+	maxTitleLen := m.width - 6 // Reserve space for "┌─", "─┐", and some dashes
 	if titleLen > maxTitleLen {
 		if maxTitleLen > 7 {
 			// Convert to runes for proper truncation of UTF-8 strings
@@ -209,9 +278,6 @@ func (m *ConversationModel) View() string {
 	}
 
 	// Calculate remaining border width
-	// Total: "┌─" (2) + title + dashes + "┐" (1) = m.width
-	// Therefore: 2 + titleLen + dashCount + 1 = m.width
-	// dashCount = m.width - titleLen - 3
 	remainingWidth := m.width - titleLen - 3
 	if remainingWidth < 0 {
 		remainingWidth = 0
@@ -265,12 +331,13 @@ func (m *ConversationModel) renderEmpty() string {
 
 	// Border style
 	borderColor := lipgloss.Color(styles.BorderNormal)
-	titleColor := lipgloss.Color(styles.TextSecondary)
+	titleColor := lipgloss.Color(styles.TextBright)
 
 	// Create centered empty text content
-	inputHeight := 5
-	borderHeight := 3 // top, bottom, spacing
-	contentHeight := m.height - inputHeight - borderHeight
+	// renderEmpty just returns the bordered box (no input, no typing indicator)
+	// Layout: topBorder (1) + contentLines + bottomBorder (1) = height
+	// Therefore: contentHeight = height - 2
+	contentHeight := m.height - 2
 	var contentLines []string
 
 	// Add empty lines to center the text vertically
@@ -411,13 +478,23 @@ func (m *ConversationModel) loadMessages() {
 	m.updateViewport()
 }
 
-// sendMessage sends the current input as a message.
+// sendMessage sends the current input as a message or media.
 func (m *ConversationModel) sendMessage() tea.Cmd {
-	if m.currentChat == nil || m.input.IsEmpty() {
+	if m.currentChat == nil {
+		return nil
+	}
+
+	// Check if we have an attachment
+	hasAttachment := m.input.HasAttachment()
+	hasText := !m.input.IsEmpty()
+
+	// Must have either text or attachment
+	if !hasAttachment && !hasText {
 		return nil
 	}
 
 	text := m.input.GetValue()
+	attachment := m.input.GetAttachment()
 	currentChat := m.currentChat
 	replyToID := int64(0)
 	if m.replyToMessage != nil {
@@ -430,7 +507,18 @@ func (m *ConversationModel) sendMessage() tea.Cmd {
 	m.sendingMessage = true
 
 	return func() tea.Msg {
-		message, err := m.client.SendMessage(currentChat, text, replyToID)
+		var message *types.Message
+		var err error
+
+		// Send media or text
+		if hasAttachment {
+			// Send media with optional caption
+			message, err = m.client.SendMediaMessage(currentChat, attachment, text, replyToID)
+		} else {
+			// Send text message
+			message, err = m.client.SendMessage(currentChat, text, replyToID)
+		}
+
 		if err != nil {
 			return sendErrorMsg{error: err.Error()}
 		}
@@ -468,7 +556,6 @@ func (m *ConversationModel) editMessage() tea.Cmd {
 	}
 }
 
-
 // SetCurrentChat sets the current chat.
 func (m *ConversationModel) SetCurrentChat(chat *types.Chat) {
 	m.currentChat = chat
@@ -491,25 +578,39 @@ func (m *ConversationModel) SetSize(width, height int) {
 	m.height = height
 
 	// Calculate viewport height
-	// Total height = border with viewport (borderHeight) + typing (1) + input (5)
-	// The border includes: top border (1) + viewport content + bottom border (1)
-	// So: borderHeight = viewport + 2
-	// Therefore: height = (viewport + 2) + 1 + 5 = viewport + 8
-	// Solving: viewport = height - 8
+	// Layout breakdown (from renderConversationView):
+	// - Top border with header: 1 line
+	// - Viewport content with side borders: viewportHeight lines
+	// - Bottom border: 1 line
+	// - Typing indicator: 0-1 lines (reserve 1 to prevent layout shift)
+	// - Input box: 5 lines (includes its own border + padding)
+	// Total: 1 + viewportHeight + 1 + 1 + 5 = viewportHeight + 8
+	// Therefore: viewportHeight = height - 8
 
-	inputHeight := 5       // Input box height
-	borderPadding := 2     // Border lines (top border + bottom border)
-	typingHeight := 1      // Typing indicator (maximum)
+	inputHeight := 5   // Input box total height (includes border + padding)
+	borderLines := 2   // Top border (1) + Bottom border (1)
+	typingHeight := 1  // Reserve space for typing indicator to prevent overflow
 
-	viewportHeight := height - inputHeight - borderPadding - typingHeight
+	viewportHeight := height - inputHeight - borderLines - typingHeight
 	if viewportHeight < 1 {
 		viewportHeight = 1
 	}
 
-	m.viewport.Width = width - 4  // Account for borders and horizontal padding (left border + left padding + right padding + right border)
+	m.viewport.Width = width - 4 // Account for borders and horizontal padding
 	m.viewport.Height = viewportHeight
 	m.input.SetWidth(width - 2)
 	m.input.SetHeight(inputHeight)
+
+	// Update media viewer size
+	viewerWidth := width - 20
+	viewerHeight := height - 10
+	if viewerWidth < 60 {
+		viewerWidth = 60
+	}
+	if viewerHeight < 30 {
+		viewerHeight = 30
+	}
+	m.mediaViewer.SetSize(viewerWidth, viewerHeight)
 
 	m.updateViewport()
 }
@@ -613,6 +714,56 @@ func (m *ConversationModel) GetTypingUsers() []int64 {
 	return typing
 }
 
+// openMediaViewer opens the media viewer for the last message with media.
+func (m *ConversationModel) openMediaViewer() tea.Cmd {
+	// Find the last message with media (going backwards)
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		message := m.messages[i]
+		if m.hasViewableMedia(message) {
+			m.selectedMsgIdx = i
+			mediaPath := ""
+			if message.Content.Media != nil && message.Content.Media.IsDownloaded {
+				mediaPath = message.Content.Media.LocalPath
+			}
+			return m.mediaViewer.ShowMedia(message, mediaPath)
+		}
+	}
+	return nil
+}
+
+// hasViewableMedia checks if a message has viewable media.
+func (m *ConversationModel) hasViewableMedia(message *types.Message) bool {
+	switch message.Content.Type {
+	case types.MessageTypePhoto, types.MessageTypeVideo, types.MessageTypeAudio,
+		types.MessageTypeVoice, types.MessageTypeDocument:
+		return message.Content.Media != nil
+	default:
+		return false
+	}
+}
+
+// downloadMediaForViewer downloads media for the viewer.
+func (m *ConversationModel) downloadMediaForViewer(message *types.Message) tea.Cmd {
+	return func() tea.Msg {
+		// Download the media using the telegram client
+		// This is a placeholder - actual implementation depends on your media manager
+		if m.currentChat == nil || message.Content.Media == nil {
+			return components.MediaDownloadedMsg{Path: ""}
+		}
+
+		// TODO: Implement actual media download using MediaManager
+		// For now, we'll just return the existing path if available
+		if message.Content.Media.IsDownloaded && message.Content.Media.LocalPath != "" {
+			return components.MediaDownloadedMsg{
+				Path: message.Content.Media.LocalPath,
+			}
+		}
+
+		// Return empty path to indicate download failure
+		return components.MediaDownloadedMsg{Path: ""}
+	}
+}
+
 // Messages for conversation updates.
 type messagesUpdatedMsg struct {
 	messages []*types.Message
@@ -631,4 +782,12 @@ type messageEditedMsg struct {
 
 type sendErrorMsg struct {
 	error string
+}
+
+// fileAttachRequestMsg requests a file picker dialog
+type fileAttachRequestMsg struct{}
+
+// fileAttachedMsg indicates a file has been attached
+type fileAttachedMsg struct {
+	filePath string
 }

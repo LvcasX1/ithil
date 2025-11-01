@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lvcasx1/ithil/internal/media"
 	"github.com/lvcasx1/ithil/internal/ui/styles"
 	"github.com/lvcasx1/ithil/internal/utils"
 	"github.com/lvcasx1/ithil/pkg/types"
@@ -16,7 +17,7 @@ type MessageComponent struct {
 	Message       *types.Message
 	Width         int
 	CurrentUserID int64
-	SenderName    string  // Cached sender name for display
+	SenderName    string // Cached sender name for display
 }
 
 // NewMessageComponent creates a new message component.
@@ -205,12 +206,78 @@ func (m *MessageComponent) renderTextContent(text string, entities []types.Messa
 	return text
 }
 
-// renderMediaContent renders media content with caption.
+// renderMediaContent renders media content with caption and preview.
 func (m *MessageComponent) renderMediaContent(mediaType, caption string, entities []types.MessageEntity) string {
 	var sb strings.Builder
 
-	// Media type indicator
-	sb.WriteString(styles.InfoStyle.Render(fmt.Sprintf("[%s]", mediaType)))
+	// Media type indicator with icon
+	var icon string
+	switch mediaType {
+	case "Photo":
+		icon = "📷"
+	case "Video":
+		icon = "🎥"
+	case "Voice Message":
+		icon = "🎤"
+	case "Audio":
+		icon = "🎵"
+	case "Sticker":
+		icon = "🎨"
+	case "GIF":
+		icon = "🎬"
+	case "Location":
+		icon = "📍"
+	case "Contact":
+		icon = "👤"
+	default:
+		icon = "📎"
+	}
+
+	mediaIndicator := fmt.Sprintf("%s %s", icon, mediaType)
+	sb.WriteString(styles.InfoStyle.Render(mediaIndicator))
+
+	// Show media info if available
+	if m.Message != nil && m.Message.Content.Media != nil {
+		media := m.Message.Content.Media
+		var mediaInfo []string
+
+		// Size
+		if media.Size > 0 {
+			sizeStr := formatFileSize(media.Size)
+			mediaInfo = append(mediaInfo, sizeStr)
+		}
+
+		// Dimensions
+		if media.Width > 0 && media.Height > 0 {
+			mediaInfo = append(mediaInfo, fmt.Sprintf("%dx%d", media.Width, media.Height))
+		}
+
+		// Duration
+		if media.Duration > 0 {
+			mediaInfo = append(mediaInfo, formatDuration(media.Duration))
+		}
+
+		if len(mediaInfo) > 0 {
+			sb.WriteString("\n")
+			sb.WriteString(styles.DimStyle.Render(strings.Join(mediaInfo, " • ")))
+		}
+
+		// Download status
+		if media.LocalPath != "" && media.IsDownloaded {
+			sb.WriteString("\n")
+			sb.WriteString(styles.SuccessStyle.Render("✓ Downloaded"))
+
+			// Render inline preview if downloaded
+			preview := m.renderMediaPreview(mediaType, media.LocalPath)
+			if preview != "" {
+				sb.WriteString("\n\n")
+				sb.WriteString(preview)
+			}
+		} else {
+			sb.WriteString("\n")
+			sb.WriteString(styles.DimStyle.Render("Press Enter to download and view"))
+		}
+	}
 
 	// Caption if present
 	if caption != "" {
@@ -219,6 +286,46 @@ func (m *MessageComponent) renderMediaContent(mediaType, caption string, entitie
 	}
 
 	return sb.String()
+}
+
+// renderMediaPreview renders a small inline preview of media.
+func (m *MessageComponent) renderMediaPreview(mediaType, localPath string) string {
+	// Calculate preview dimensions (small for inline display)
+	previewWidth := 30
+	previewHeight := 10
+
+	switch mediaType {
+	case "Photo":
+		// Render small ASCII art thumbnail
+		imageRenderer := media.NewImageRenderer(previewWidth, previewHeight, true)
+		preview, err := imageRenderer.RenderImageFile(localPath)
+		if err != nil {
+			return styles.DimStyle.Render(fmt.Sprintf("Preview error: %s", err.Error()))
+		}
+		return preview
+
+	case "Audio", "Voice Message":
+		// Render audio waveform preview
+		audioRenderer := media.NewAudioRenderer(previewWidth)
+		var preview string
+		var err error
+		if mediaType == "Voice Message" {
+			preview, err = audioRenderer.RenderVoicePreview(localPath, m.Message.Content.Media)
+		} else {
+			preview, err = audioRenderer.RenderAudioPreview(localPath, m.Message.Content.Media)
+		}
+		if err != nil {
+			return styles.DimStyle.Render(fmt.Sprintf("Preview error: %s", err.Error()))
+		}
+		return preview
+
+	case "Video":
+		// Show a simple placeholder for videos
+		return styles.DimStyle.Render("🎥 Video file (press Enter to view details)")
+
+	default:
+		return ""
+	}
 }
 
 // renderPoll renders a poll message.
@@ -296,16 +403,16 @@ func (m *MessageComponent) SetWidth(width int) {
 func getUserColor(userID int64) lipgloss.Color {
 	// Color palette for user distinction
 	colors := []string{
-		styles.AccentCyan,       // 0: Cyan
-		styles.AccentGreen,      // 1: Green
-		styles.AccentYellow,     // 2: Yellow
-		styles.AccentMagenta,    // 3: Magenta
-		styles.AccentBlue,       // 4: Blue
-		styles.AccentRed,        // 5: Red
-		"10",                    // 6: Bright Green
-		"11",                    // 7: Bright Yellow
-		"13",                    // 8: Bright Magenta
-		"14",                    // 9: Bright Cyan
+		styles.AccentCyan,    // 0: Cyan
+		styles.AccentGreen,   // 1: Green
+		styles.AccentYellow,  // 2: Yellow
+		styles.AccentMagenta, // 3: Magenta
+		styles.AccentBlue,    // 4: Blue
+		styles.AccentRed,     // 5: Red
+		"10",                 // 6: Bright Green
+		"11",                 // 7: Bright Yellow
+		"13",                 // 8: Bright Magenta
+		"14",                 // 9: Bright Cyan
 	}
 
 	// Use modulo to map user ID to a color index

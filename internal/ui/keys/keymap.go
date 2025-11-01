@@ -6,18 +6,18 @@ import "github.com/charmbracelet/bubbles/key"
 // KeyMap defines all keyboard shortcuts for the application.
 type KeyMap struct {
 	// Global navigation
-	Quit         key.Binding
-	Help         key.Binding
-	Back         key.Binding
-	Refresh      key.Binding
-	Search       key.Binding
+	Quit    key.Binding
+	Help    key.Binding
+	Back    key.Binding
+	Refresh key.Binding
+	Search  key.Binding
 
 	// Pane navigation
-	NextPane     key.Binding
-	PrevPane     key.Binding
-	FocusChatList    key.Binding
+	NextPane          key.Binding
+	PrevPane          key.Binding
+	FocusChatList     key.Binding
 	FocusConversation key.Binding
-	FocusSidebar     key.Binding
+	FocusSidebar      key.Binding
 
 	// List navigation (vim-style)
 	Up           key.Binding
@@ -30,40 +30,40 @@ type KeyMap struct {
 	GotoBottom   key.Binding
 
 	// Chat list actions
-	OpenChat     key.Binding
-	PinChat      key.Binding
-	MuteChat     key.Binding
-	ArchiveChat  key.Binding
-	MarkRead     key.Binding
-	DeleteChat   key.Binding
+	OpenChat    key.Binding
+	PinChat     key.Binding
+	MuteChat    key.Binding
+	ArchiveChat key.Binding
+	MarkRead    key.Binding
+	DeleteChat  key.Binding
 
 	// Conversation actions
-	Reply        key.Binding
-	Edit         key.Binding
-	Delete       key.Binding
-	Forward      key.Binding
-	Copy         key.Binding
-	React        key.Binding
-	Pin          key.Binding
-	Download     key.Binding
+	Reply    key.Binding
+	Edit     key.Binding
+	Delete   key.Binding
+	Forward  key.Binding
+	Copy     key.Binding
+	React    key.Binding
+	Pin      key.Binding
+	Download key.Binding
 
 	// Message input
-	Send         key.Binding
-	SendAlt      key.Binding  // Ctrl+Enter if Enter sends, or vice versa
-	NewLine      key.Binding
-	Attach       key.Binding
-	Emoji        key.Binding
-	CancelReply  key.Binding
-	CancelEdit   key.Binding
+	Send        key.Binding
+	SendAlt     key.Binding // Ctrl+Enter if Enter sends, or vice versa
+	NewLine     key.Binding
+	Attach      key.Binding
+	Emoji       key.Binding
+	CancelReply key.Binding
+	CancelEdit  key.Binding
 
 	// Media actions
-	ViewMedia    key.Binding
-	OpenLink     key.Binding
+	ViewMedia key.Binding
+	OpenLink  key.Binding
 
 	// Sidebar
 	ToggleSidebar key.Binding
-	UserInfo     key.Binding
-	ChatInfo     key.Binding
+	UserInfo      key.Binding
+	ChatInfo      key.Binding
 
 	// Settings
 	Settings      key.Binding
@@ -71,9 +71,9 @@ type KeyMap struct {
 	ToggleStealth key.Binding
 
 	// Filters/Folders
-	ShowFilters  key.Binding
-	NextFilter   key.Binding
-	PrevFilter   key.Binding
+	ShowFilters key.Binding
+	NextFilter  key.Binding
+	PrevFilter  key.Binding
 }
 
 // DefaultKeyMap returns the default keyboard shortcuts.

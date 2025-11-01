@@ -97,8 +97,11 @@ func (m *ChatListModel) Update(msg tea.Msg) (*ChatListModel, tea.Cmd) {
 		return m, nil
 	}
 
-	// Update viewport
-	m.viewport, cmd = m.viewport.Update(msg)
+	// CRITICAL: Only update viewport when this pane is focused
+	// This prevents navigation keys from affecting the viewport when the pane is not focused
+	if m.focused {
+		m.viewport, cmd = m.viewport.Update(msg)
+	}
 	return m, cmd
 }
 
@@ -114,10 +117,10 @@ func (m *ChatListModel) View() string {
 
 	if m.focused {
 		borderColor = lipgloss.Color(styles.BorderFocused)
-		titleColor = lipgloss.Color(styles.TextBright)
+		titleColor = lipgloss.Color(styles.AccentCyan)
 	} else {
 		borderColor = lipgloss.Color(styles.BorderNormal)
-		titleColor = lipgloss.Color(styles.TextSecondary)
+		titleColor = lipgloss.Color(styles.TextBright)
 	}
 
 	// Render viewport content
@@ -182,14 +185,16 @@ func (m *ChatListModel) renderEmpty() string {
 
 	if m.focused {
 		borderColor = lipgloss.Color(styles.BorderFocused)
-		titleColor = lipgloss.Color(styles.TextBright)
+		titleColor = lipgloss.Color(styles.AccentCyan)
 	} else {
 		borderColor = lipgloss.Color(styles.BorderNormal)
-		titleColor = lipgloss.Color(styles.TextSecondary)
+		titleColor = lipgloss.Color(styles.TextBright)
 	}
 
 	// Create centered empty text content
-	contentHeight := m.height - 3 // -3 for top border, bottom border, and some padding
+	// Layout: topBorder (1) + contentLines + bottomBorder (1) = height
+	// Therefore: contentHeight = height - 2
+	contentHeight := m.height - 2
 	var contentLines []string
 
 	// Add empty lines to center the text vertically
@@ -272,7 +277,7 @@ func (m *ChatListModel) renderAllChats() string {
 		chatViews = append(chatViews, chatItem.Render())
 	}
 
-	return strings.Join(chatViews, "\n")  // Compact spacing between chats
+	return strings.Join(chatViews, "\n") // Compact spacing between chats
 }
 
 // updateViewport updates the viewport content and scrolls to selected item.
@@ -356,7 +361,7 @@ func (m *ChatListModel) SetSize(width, height int) {
 	m.height = height
 
 	// Reserve space for borders only (title is now embedded in border)
-	m.viewport.Width = width - 4  // Account for borders and horizontal padding (left border + left padding + right padding + right border)
+	m.viewport.Width = width - 4   // Account for borders and horizontal padding (left border + left padding + right padding + right border)
 	m.viewport.Height = height - 2 // Account for top border (1) + bottom border (1)
 
 	m.updateViewport()
