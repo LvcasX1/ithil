@@ -11,13 +11,13 @@ import (
 
 // Config represents the application configuration.
 type Config struct {
-	App          AppConfig          `yaml:"app"`
-	Telegram     TelegramConfig     `yaml:"telegram"`
-	UI           UIConfig           `yaml:"ui"`
+	App           AppConfig          `yaml:"app"`
+	Telegram      TelegramConfig     `yaml:"telegram"`
+	UI            UIConfig           `yaml:"ui"`
 	Notifications NotificationConfig `yaml:"notifications"`
-	Privacy      PrivacyConfig      `yaml:"privacy"`
-	Cache        CacheConfig        `yaml:"cache"`
-	Logging      LoggingConfig      `yaml:"logging"`
+	Privacy       PrivacyConfig      `yaml:"privacy"`
+	Cache         CacheConfig        `yaml:"cache"`
+	Logging       LoggingConfig      `yaml:"logging"`
 }
 
 // AppConfig contains general application settings.
@@ -28,9 +28,9 @@ type AppConfig struct {
 
 // TelegramConfig contains Telegram API credentials and settings.
 type TelegramConfig struct {
-	APIID            string `yaml:"api_id"`
-	APIHash          string `yaml:"api_hash"`
-	SessionFile      string `yaml:"session_file"`
+	APIID             string `yaml:"api_id"`
+	APIHash           string `yaml:"api_hash"`
+	SessionFile       string `yaml:"session_file"`
 	DatabaseDirectory string `yaml:"database_directory"`
 }
 
@@ -76,10 +76,10 @@ type KeyboardConfig struct {
 
 // NotificationConfig contains notification settings.
 type NotificationConfig struct {
-	Enabled    bool     `yaml:"enabled"`
-	Sound      bool     `yaml:"sound"`
-	Desktop    bool     `yaml:"desktop"`
-	MutedChats []int64  `yaml:"muted_chats"`
+	Enabled    bool    `yaml:"enabled"`
+	Sound      bool    `yaml:"sound"`
+	Desktop    bool    `yaml:"desktop"`
+	MutedChats []int64 `yaml:"muted_chats"`
 }
 
 // PrivacyConfig contains privacy settings.
@@ -115,9 +115,9 @@ func DefaultConfig() *Config {
 			Version: "0.1.0",
 		},
 		Telegram: TelegramConfig{
-			APIID:            "",
-			APIHash:          "",
-			SessionFile:      filepath.Join(configDir, "session.json"),
+			APIID:             "",
+			APIHash:           "",
+			SessionFile:       filepath.Join(configDir, "session.json"),
 			DatabaseDirectory: filepath.Join(configDir, "tdlib"),
 		},
 		UI: UIConfig{

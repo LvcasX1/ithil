@@ -455,13 +455,13 @@ func (h *UpdateHandler) convertUser(tgUser *tg.User) *types.User {
 	}
 
 	user := &types.User{
-		ID:        tgUser.ID,
-		FirstName: tgUser.FirstName,
-		LastName:  tgUser.LastName,
-		Username:  tgUser.Username,
-		IsBot:     tgUser.Bot,
+		ID:         tgUser.ID,
+		FirstName:  tgUser.FirstName,
+		LastName:   tgUser.LastName,
+		Username:   tgUser.Username,
+		IsBot:      tgUser.Bot,
 		IsVerified: tgUser.Verified,
-		IsPremium: tgUser.Premium,
+		IsPremium:  tgUser.Premium,
 	}
 
 	// Convert user status

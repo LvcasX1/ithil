@@ -13,18 +13,18 @@ import (
 
 // ChatItemComponent represents a single chat in the chat list.
 type ChatItemComponent struct {
-	Chat       *types.Chat
-	IsSelected bool
-	Width      int
+	Chat        *types.Chat
+	IsSelected  bool
+	Width       int
 	ShowPreview bool
 }
 
 // NewChatItemComponent creates a new chat item component.
 func NewChatItemComponent(chat *types.Chat, isSelected bool, width int) *ChatItemComponent {
 	return &ChatItemComponent{
-		Chat:       chat,
-		IsSelected: isSelected,
-		Width:      width,
+		Chat:        chat,
+		IsSelected:  isSelected,
+		Width:       width,
 		ShowPreview: true,
 	}
 }
@@ -53,17 +53,17 @@ func (c *ChatItemComponent) Render() string {
 	if c.IsSelected {
 		// Selected: bright blue border, transparent background, compact padding
 		itemStyle = lipgloss.NewStyle().
-			Padding(0, 1). // Compact padding for more vertical space
-			Border(lipgloss.ThickBorder()). // Thick border for emphasis
+			Padding(0, 1).                                          // Compact padding for more vertical space
+			Border(lipgloss.ThickBorder()).                         // Thick border for emphasis
 			BorderForeground(lipgloss.Color(styles.BorderFocused)). // Bright blue for selection
-			Width(contentWidth) // Content width: viewport width minus padding and borders
+			Width(contentWidth)                                     // Content width: viewport width minus padding and borders
 	} else {
 		// Unselected: subtle border, transparent background, compact padding
 		itemStyle = lipgloss.NewStyle().
 			Padding(0, 1). // Compact padding for more vertical space
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(styles.BorderNormal)). // Subtle border
-			Width(contentWidth) // Content width: viewport width minus padding and borders
+			Width(contentWidth)                                    // Content width: viewport width minus padding and borders
 	}
 
 	return itemStyle.Render(content)
@@ -178,7 +178,7 @@ func (c *ChatItemComponent) buildFirstLine() string {
 		}
 		unreadBadge := lipgloss.NewStyle().
 			Background(lipgloss.Color(styles.AccentRed)).
-			Foreground(lipgloss.Color(styles.TextBright)).
+			Foreground(lipgloss.Color(styles.ColorBlack)).
 			Padding(0, 1).
 			Bold(true).
 			Render(unreadText)

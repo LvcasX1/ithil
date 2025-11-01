@@ -38,7 +38,7 @@ func NewStatusBarComponent(width int) *StatusBarComponent {
 	}
 }
 
-// Render renders the status bar component.
+// Render renders the status bar component with enhanced styling.
 func (s *StatusBarComponent) Render() string {
 	// Left section: App name and connection status
 	leftSection := s.renderLeftSection()
@@ -52,7 +52,7 @@ func (s *StatusBarComponent) Render() string {
 	// Calculate widths
 	leftWidth := lipgloss.Width(leftSection)
 	rightWidth := lipgloss.Width(rightSection)
-	middleWidth := s.Width - leftWidth - rightWidth - 2
+	middleWidth := s.Width - leftWidth - rightWidth - 4 // Add padding
 
 	if middleWidth < 0 {
 		middleWidth = 0
@@ -64,74 +64,132 @@ func (s *StatusBarComponent) Render() string {
 		Align(lipgloss.Center)
 	middleRendered := middleStyle.Render(middleSection)
 
-	// Combine sections
-	statusBar := leftSection + middleRendered + rightSection
+	// Combine sections with visual separators
+	separator := s.getSeparator()
+	statusBar := leftSection + separator + middleRendered + separator + rightSection
 
-	// Apply container style
-	return styles.StatusBarStyle.Width(s.Width).Render(statusBar)
+	// Apply enhanced container style
+	containerStyle := s.getContainerStyle()
+	return containerStyle.Render(statusBar)
 }
 
-// renderLeftSection renders the left section of the status bar.
+// renderLeftSection renders the left section of the status bar with enhanced visuals.
 func (s *StatusBarComponent) renderLeftSection() string {
 	var parts []string
 
-	// App name/logo
-	appName := styles.StatusActiveStyle.Render("ITHIL")
+	// App name/logo with icon
+	appIcon := "⚡"
+	appName := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.AccentCyan)).
+		Bold(true).
+		Render(appIcon + " ITHIL")
 	parts = append(parts, appName)
 
-	// Connection status
+	// Connection status with visual indicator
+	var statusIcon string
 	var statusText string
 	var statusStyle lipgloss.Style
 
 	switch s.ConnectionStatus {
 	case StatusConnected:
+		statusIcon = "●"
 		statusText = "Connected"
-		statusStyle = styles.ConnectedStyle
+		statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(styles.AccentGreen)).
+			Bold(true)
 	case StatusConnecting:
-		statusText = "Connecting..."
-		statusStyle = styles.ConnectingStyle
+		statusIcon = "◐"
+		statusText = "Connecting"
+		statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(styles.AccentYellow))
 	case StatusDisconnected:
+		statusIcon = "○"
 		statusText = "Disconnected"
-		statusStyle = styles.DisconnectedStyle
+		statusStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(styles.AccentRed))
 	}
 
-	parts = append(parts, statusStyle.Render(statusText))
+	statusDisplay := statusStyle.Render(statusIcon + " " + statusText)
+	parts = append(parts, statusDisplay)
 
-	return strings.Join(parts, " ")
+	separator := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.TextSecondary)).
+		Render("│")
+
+	return strings.Join(parts, " "+separator+" ")
 }
 
-// renderMiddleSection renders the middle section of the status bar.
+// renderMiddleSection renders the middle section of the status bar with enhanced styling.
 func (s *StatusBarComponent) renderMiddleSection() string {
 	if s.Message != "" {
-		return styles.StatusActiveStyle.Render(s.Message)
+		icon := "ℹ️"
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color(styles.AccentYellow)).
+			Bold(true).
+			Render(icon + " " + s.Message)
 	}
 
 	if s.CurrentChat != "" {
-		return styles.StatusInfoStyle.Render(s.CurrentChat)
+		icon := "💬"
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color(styles.AccentCyan)).
+			Render(icon + " " + s.CurrentChat)
 	}
 
 	if s.FilterName != "" {
-		return styles.StatusInfoStyle.Render(fmt.Sprintf("Filter: %s", s.FilterName))
+		icon := "📁"
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color(styles.AccentMagenta)).
+			Render(icon + " Filter: " + s.FilterName)
 	}
 
-	return ""
+	// Default message when nothing is selected
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.TextSecondary)).
+		Italic(true).
+		Render("Ready")
 }
 
-// renderRightSection renders the right section of the status bar.
+// renderRightSection renders the right section of the status bar with enhanced visuals.
 func (s *StatusBarComponent) renderRightSection() string {
 	var parts []string
 
-	// Unread count
+	// Unread count with badge styling
 	if s.UnreadCount > 0 {
-		unreadText := fmt.Sprintf("%d unread", s.UnreadCount)
-		parts = append(parts, styles.InfoStyle.Render(unreadText))
+		icon := "📬"
+		unreadText := fmt.Sprintf("%d", s.UnreadCount)
+		if s.UnreadCount > 99 {
+			unreadText = "99+"
+		}
+
+		unreadBadge := lipgloss.NewStyle().
+			Background(lipgloss.Color(styles.AccentRed)).
+			Foreground(lipgloss.Color(styles.ColorBlack)).
+			Padding(0, 1).
+			Bold(true).
+			Render(unreadText)
+
+		parts = append(parts, icon+" "+unreadBadge)
 	}
 
-	// Help indicator
-	helpText := "? for help"
-	parts = append(parts, styles.DimStyle.Render(helpText))
+	// Version info
+	versionText := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.TextSecondary)).
+		Render("v" + s.AppVersion)
+	parts = append(parts, versionText)
 
-	return strings.Join(parts, " • ")
+	// Help indicator with icon
+	helpIcon := "❓"
+	helpText := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.AccentCyan)).
+		Render(helpIcon + " Press ? for help")
+	parts = append(parts, helpText)
+
+	separator := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.TextSecondary)).
+		Render("│")
+
+	return strings.Join(parts, " "+separator+" ")
 }
 
 // SetConnectionStatus sets the connection status.
@@ -167,4 +225,21 @@ func (s *StatusBarComponent) SetMessage(message string) {
 // ClearMessage clears the temporary message.
 func (s *StatusBarComponent) ClearMessage() {
 	s.Message = ""
+}
+
+// getSeparator returns a styled separator for the status bar.
+func (s *StatusBarComponent) getSeparator() string {
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.TextSecondary)).
+		Render(" ")
+}
+
+// getContainerStyle returns an enhanced container style for the status bar.
+func (s *StatusBarComponent) getContainerStyle() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Padding(0, 1).
+		BorderTop(true).
+		BorderStyle(lipgloss.ThickBorder()).
+		BorderForeground(lipgloss.Color(styles.AccentCyan)).
+		Width(s.Width)
 }

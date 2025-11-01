@@ -9,19 +9,19 @@ import (
 
 // Cache manages cached data for the application.
 type Cache struct {
-	mu               sync.RWMutex
-	messages         map[int64]map[int64]*types.Message // chatID -> messageID -> Message
-	chats            map[int64]*types.Chat              // chatID -> Chat
-	users            map[int64]*types.User              // userID -> User
+	mu                 sync.RWMutex
+	messages           map[int64]map[int64]*types.Message // chatID -> messageID -> Message
+	chats              map[int64]*types.Chat              // chatID -> Chat
+	users              map[int64]*types.User              // userID -> User
 	maxMessagesPerChat int
 }
 
 // New creates a new cache instance.
 func New(maxMessagesPerChat int) *Cache {
 	return &Cache{
-		messages:         make(map[int64]map[int64]*types.Message),
-		chats:            make(map[int64]*types.Chat),
-		users:            make(map[int64]*types.User),
+		messages:           make(map[int64]map[int64]*types.Message),
+		chats:              make(map[int64]*types.Chat),
+		users:              make(map[int64]*types.User),
 		maxMessagesPerChat: maxMessagesPerChat,
 	}
 }

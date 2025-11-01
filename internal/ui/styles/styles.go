@@ -20,7 +20,7 @@ const (
 	ColorWhite   = "7"
 
 	// Bright colors (8-15)
-	ColorBrightBlack   = "8"  // Gray
+	ColorBrightBlack   = "8" // Gray
 	ColorBrightRed     = "9"
 	ColorBrightGreen   = "10"
 	ColorBrightYellow  = "11"
@@ -34,13 +34,13 @@ const (
 // These map to ANSI codes that will adapt to the user's terminal theme
 const (
 	// Primary text - uses terminal default
-	TextPrimary   = ""           // Empty string uses terminal default foreground
-	TextSecondary = ColorBrightBlack  // Gray/dim text
-	TextBright    = ColorBrightWhite  // Emphasized text
+	TextPrimary   = ""               // Empty string uses terminal default foreground
+	TextSecondary = ColorBrightBlack // Gray/dim text
+	TextBright    = ColorBrightWhite // Emphasized text
 
 	// Backgrounds - mostly omitted to use terminal default
-	BgPrimary   = ""           // Terminal default background
-	BgSecondary = ColorBlack   // Subtle background (if needed)
+	BgPrimary   = ""         // Terminal default background
+	BgSecondary = ColorBlack // Subtle background (if needed)
 
 	// Accents and highlights
 	AccentBlue    = ColorBrightBlue
@@ -51,8 +51,8 @@ const (
 	AccentMagenta = ColorBrightMagenta
 
 	// Borders
-	BorderNormal  = ColorBrightBlack  // Subtle border
-	BorderFocused = ColorBrightBlue   // Highlighted border
+	BorderNormal  = ColorBrightBlack // Subtle border
+	BorderFocused = ColorBrightBlue  // Highlighted border
 )
 
 // Global base styles
@@ -122,7 +122,7 @@ var (
 	// Unread badge
 	UnreadBadgeStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(AccentRed)).
-				Foreground(lipgloss.Color(TextBright)).
+				Foreground(lipgloss.Color(ColorBlack)).
 				Bold(true).
 				Padding(0, 1).
 				MarginLeft(1)
@@ -232,6 +232,7 @@ var (
 	// Status bar active section
 	StatusActiveStyle = lipgloss.NewStyle().
 				Background(lipgloss.Color(AccentCyan)).
+				Foreground(lipgloss.Color(ColorBlack)).
 				Bold(true).
 				Padding(0, 1)
 
@@ -390,17 +391,17 @@ var (
 // Logo/Title Style
 var (
 	LogoStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(AccentCyan)).
-			Bold(true).
-			Align(lipgloss.Center)
+		Foreground(lipgloss.Color(AccentCyan)).
+		Bold(true).
+		Align(lipgloss.Center)
 )
 
 // Typing Indicator Style
 var (
 	TypingIndicatorStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(TextSecondary)).
-				Italic(true).
-				Padding(0, 1)
+		Foreground(lipgloss.Color(TextSecondary)).
+		Italic(true).
+		Padding(0, 1)
 )
 
 // Width sets the width for a style and returns it.

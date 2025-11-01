@@ -77,8 +77,11 @@ func (m *SidebarModel) Update(msg tea.Msg) (*SidebarModel, tea.Cmd) {
 		return m, nil
 	}
 
-	// Update viewport
-	m.viewport, cmd = m.viewport.Update(msg)
+	// CRITICAL: Only update viewport when this pane is focused
+	// This prevents navigation keys from affecting the viewport when the pane is not focused
+	if m.focused {
+		m.viewport, cmd = m.viewport.Update(msg)
+	}
 	return m, cmd
 }
 
@@ -98,10 +101,10 @@ func (m *SidebarModel) View() string {
 
 	if m.focused {
 		borderColor = lipgloss.Color(styles.BorderFocused)
-		titleColor = lipgloss.Color(styles.TextBright)
+		titleColor = lipgloss.Color(styles.AccentCyan)
 	} else {
 		borderColor = lipgloss.Color(styles.BorderNormal)
-		titleColor = lipgloss.Color(styles.TextSecondary)
+		titleColor = lipgloss.Color(styles.TextBright)
 	}
 
 	// Get viewport content
@@ -164,14 +167,16 @@ func (m *SidebarModel) renderEmpty() string {
 
 	if m.focused {
 		borderColor = lipgloss.Color(styles.BorderFocused)
-		titleColor = lipgloss.Color(styles.TextBright)
+		titleColor = lipgloss.Color(styles.AccentCyan)
 	} else {
 		borderColor = lipgloss.Color(styles.BorderNormal)
-		titleColor = lipgloss.Color(styles.TextSecondary)
+		titleColor = lipgloss.Color(styles.TextBright)
 	}
 
 	// Create centered empty text content
-	contentHeight := m.height - 3 // -3 for borders
+	// Layout: topBorder (1) + contentLines + bottomBorder (1) = height
+	// Therefore: contentHeight = height - 2
+	contentHeight := m.height - 2
 	var contentLines []string
 
 	// Add empty lines to center the text vertically
@@ -256,7 +261,7 @@ func (m *SidebarModel) renderChatInfoContent() string {
 	chatType := m.getChatTypeName(m.currentChat.Type)
 	badgeStyle := lipgloss.NewStyle().
 		Background(lipgloss.Color(styles.AccentBlue)).
-		Foreground(lipgloss.Color(styles.TextBright)).
+		Foreground(lipgloss.Color(styles.ColorBlack)).
 		Padding(0, 1).
 		Bold(true)
 	content += lipgloss.NewStyle().Align(lipgloss.Center).Width(m.viewport.Width).Render(badgeStyle.Render(chatType)) + "\n\n"
@@ -344,7 +349,7 @@ func (m *SidebarModel) renderChatInfoContent() string {
 		}
 
 		messageStyle := lipgloss.NewStyle().
-			Width(m.viewport.Width-2).
+			Width(m.viewport.Width - 2).
 			Padding(1).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color(styles.BorderNormal))

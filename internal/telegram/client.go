@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,19 +20,19 @@ import (
 
 // Config holds the Telegram client configuration.
 type Config struct {
-	APIID            string
-	APIHash          string
-	SessionFile      string
+	APIID             string
+	APIHash           string
+	SessionFile       string
 	DatabaseDirectory string
 }
 
 // Client wraps the gotd Telegram client.
 type Client struct {
-	config  *Config
-	logger  *slog.Logger
-	ctx     context.Context
-	cancel  context.CancelFunc
-	updates chan *types.Update
+	config           *Config
+	logger           *slog.Logger
+	ctx              context.Context
+	cancel           context.CancelFunc
+	updates          chan *types.Update
 	authStateChanges chan types.AuthState
 
 	// API credentials
@@ -39,21 +40,24 @@ type Client struct {
 	apiHash string
 
 	// gotd client and API
-	client    *telegram.Client
-	api       *tg.Client
+	client         *telegram.Client
+	api            *tg.Client
 	sessionStorage *SessionStorage
 
 	// Authentication state management
-	authMu        sync.RWMutex
-	authState     types.AuthState
+	authMu          sync.RWMutex
+	authState       types.AuthState
 	isAuthenticated bool
-	currentUser   *tg.User
+	currentUser     *tg.User
 
 	// Update handler control
-	updateHandler *UpdateHandler
-	gaps          *updates.Manager
+	updateHandler  *UpdateHandler
+	gaps           *updates.Manager
 	updatesStarted bool
-	wg           sync.WaitGroup
+	wg             sync.WaitGroup
+
+	// Media handling
+	mediaManager *MediaManager
 }
 
 // New creates a new Telegram client.
@@ -121,6 +125,14 @@ func New(config *Config, logger *slog.Logger, ctx context.Context) (*Client, err
 	client.client = telegram.NewClient(apiID, config.APIHash, opts)
 	client.api = client.client.API()
 
+	// Initialize media manager
+	mediaDir := filepath.Join(config.DatabaseDirectory, "media")
+	mediaManager, err := client.NewMediaManager(mediaDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create media manager: %w", err)
+	}
+	client.mediaManager = mediaManager
+
 	return client, nil
 }
 
@@ -144,8 +156,8 @@ func (c *Client) Start() error {
 				// Check if this is an invalid session error - clear it
 				errStr := err.Error()
 				if strings.Contains(errStr, "AUTH_KEY_UNREGISTERED") ||
-				   strings.Contains(errStr, "SESSION_REVOKED") ||
-				   strings.Contains(errStr, "AUTH_KEY_DUPLICATED") {
+					strings.Contains(errStr, "SESSION_REVOKED") ||
+					strings.Contains(errStr, "AUTH_KEY_DUPLICATED") {
 					c.logger.Warn("Invalid session detected, clearing session...")
 					c.sessionStorage.ClearSession()
 					c.sessionStorage.ClearAuthData()
@@ -366,4 +378,43 @@ func (c *Client) SetCache(cache interface {
 		c.updateHandler.SetCache(cache)
 		c.logger.Info("Cache set on update handler")
 	}
+}
+
+// GetMediaManager returns the media manager for upload/download operations.
+func (c *Client) GetMediaManager() *MediaManager {
+	return c.mediaManager
+}
+
+// SendMediaMessage sends a media message (photo, video, audio, document).
+func (c *Client) SendMediaMessage(chat *types.Chat, filePath string, caption string, replyToMessageID int64) (*types.Message, error) {
+	if c.mediaManager == nil {
+		return nil, fmt.Errorf("media manager not initialized")
+	}
+
+	// Detect media type from file
+	mediaType := DetectMediaType(filePath)
+
+	// Send based on type
+	switch mediaType {
+	case types.MessageTypePhoto:
+		return c.mediaManager.UploadPhoto(c.ctx, chat, filePath, caption, replyToMessageID)
+	case types.MessageTypeVideo:
+		return c.mediaManager.UploadVideo(c.ctx, chat, filePath, caption, replyToMessageID)
+	case types.MessageTypeAudio:
+		return c.mediaManager.UploadAudio(c.ctx, chat, filePath, caption, replyToMessageID)
+	default:
+		return c.mediaManager.UploadFile(c.ctx, chat, filePath, caption, replyToMessageID)
+	}
+}
+
+// DownloadMedia downloads media from a message to local storage.
+func (c *Client) DownloadMedia(message *types.Message) (string, error) {
+	if c.mediaManager == nil {
+		return "", fmt.Errorf("media manager not initialized")
+	}
+
+	// This would require access to the original TG message, which we don't store
+	// For now, this is a placeholder - actual implementation would need to fetch
+	// the message from Telegram first to get the file location
+	return "", fmt.Errorf("download media not yet fully implemented - requires message fetch")
 }

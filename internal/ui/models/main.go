@@ -28,15 +28,15 @@ const (
 
 // MainModel is the root Bubbletea model for the application.
 type MainModel struct {
-	config       *app.Config
-	client       *telegram.Client
-	cache        *cache.Cache
-	keyMap       keys.KeyMap
-	width        int
-	height       int
-	ready        bool
+	config        *app.Config
+	client        *telegram.Client
+	cache         *cache.Cache
+	keyMap        keys.KeyMap
+	width         int
+	height        int
+	ready         bool
 	authenticated bool
-	authChecked  bool  // Track if we've checked auth status yet
+	authChecked   bool // Track if we've checked auth status yet
 
 	// Sub-models
 	auth         *AuthModel
@@ -44,12 +44,14 @@ type MainModel struct {
 	conversation *ConversationModel
 	sidebar      *SidebarModel
 	statusBar    *components.StatusBarComponent
+	filePicker   *components.FilePickerComponent
 
 	// State
-	focusPane    FocusPane
-	currentChat  *types.Chat
-	showHelp     bool
-	errorMessage string
+	focusPane      FocusPane
+	currentChat    *types.Chat
+	showHelp       bool
+	showFilePicker bool
+	errorMessage   string
 }
 
 // NewMainModel creates a new main model.
@@ -71,13 +73,13 @@ func NewMainModel(config *app.Config, client *telegram.Client) *MainModel {
 	// Will be set via checkAuthStatus() in Init()
 
 	return &MainModel{
-		config:       config,
-		client:       client,
-		cache:        cache,
-		keyMap:       keyMap,
-		authenticated: false,  // Will be updated via authStateMsg
-		authChecked:  false,   // Will be set to true when we get auth status
-		focusPane:    FocusChatList,
+		config:        config,
+		client:        client,
+		cache:         cache,
+		keyMap:        keyMap,
+		authenticated: false, // Will be updated via authStateMsg
+		authChecked:   false, // Will be set to true when we get auth status
+		focusPane:     FocusChatList,
 
 		// Initialize sub-models
 		auth:         NewAuthModel(client),
@@ -95,7 +97,7 @@ func (m *MainModel) Init() tea.Cmd {
 		m.chatList.Init(),
 		m.conversation.Init(),
 		m.sidebar.Init(),
-		m.subscribeToAuthStateChanges(),  // Listen for auth state changes from client
+		m.subscribeToAuthStateChanges(), // Listen for auth state changes from client
 		m.tickStatusBar(),
 		// NOTE: subscribeToUpdates() is called when authenticated (see authStateMsg handler)
 	)
@@ -170,14 +172,14 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.recalculateLayout()
 
 	case authStateMsg:
-		m.authChecked = true  // Mark that we've received auth status
+		m.authChecked = true // Mark that we've received auth status
 		if msg.state == types.AuthStateReady {
 			m.authenticated = true
 			m.statusBar.SetConnectionStatus(components.StatusConnected)
 			// Start update subscription when authenticated (runs in background goroutine)
 			return m, tea.Batch(m.loadChats(), m.subscribeToAuthStateChanges(), m.waitForUpdate())
 		}
-		m.authenticated = false  // Explicitly set to false for unauthenticated states
+		m.authenticated = false // Explicitly set to false for unauthenticated states
 		var cmd tea.Cmd
 		m.auth, cmd = m.auth.Update(msg)
 		return m, tea.Batch(cmd, m.subscribeToAuthStateChanges())
@@ -270,6 +272,37 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clearStatusMsg:
 		m.statusBar.ClearMessage()
 		return m, nil
+
+	case fileAttachRequestMsg:
+		// Show file picker
+		m.showFilePicker = true
+		if m.filePicker == nil {
+			m.filePicker = components.NewFilePickerComponent("")
+			m.filePicker.SetSize(m.width-20, m.height-10)
+		}
+		return m, nil
+
+	case components.FileSelectedMsg:
+		// File was selected in picker
+		m.showFilePicker = false
+		m.conversation.input.SetAttachment(msg.Path)
+		m.statusBar.SetMessage("File attached: " + msg.Path)
+		// Clear message after 3 seconds
+		return m, tea.Tick(time.Second*3, func(t time.Time) tea.Msg {
+			return clearStatusMsg{}
+		})
+
+	case components.FilePickerCancelledMsg:
+		// File picker was cancelled
+		m.showFilePicker = false
+		return m, nil
+	}
+
+	// If file picker is shown, handle its updates
+	if m.showFilePicker && m.filePicker != nil {
+		var cmd tea.Cmd
+		m.filePicker, cmd = m.filePicker.Update(msg)
+		return m, cmd
 	}
 
 	// Update sub-models based on authentication state
@@ -320,6 +353,32 @@ func (m *MainModel) View() string {
 
 // renderMainUI renders the main three-pane UI.
 func (m *MainModel) renderMainUI() string {
+	// If file picker is shown, overlay it on top
+	if m.showFilePicker && m.filePicker != nil {
+		// Overlay file picker centered
+		filePickerView := m.filePicker.View()
+
+		// Center the file picker
+		overlay := lipgloss.Place(
+			m.width,
+			m.height-1, // -1 for status bar
+			lipgloss.Center,
+			lipgloss.Center,
+			filePickerView,
+			lipgloss.WithWhitespaceChars(" "),
+			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
+		)
+
+		// Combine with status bar
+		statusBarView := m.statusBar.Render()
+		return lipgloss.JoinVertical(lipgloss.Left, overlay, statusBarView)
+	}
+
+	return m.renderMainUIContent()
+}
+
+// renderMainUIContent renders the main content without overlays.
+func (m *MainModel) renderMainUIContent() string {
 	// Render panes
 	chatListView := m.chatList.View()
 	conversationView := m.conversation.View()

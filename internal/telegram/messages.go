@@ -114,16 +114,16 @@ func (c *Client) convertMessage(msg *tg.Message, userMap map[int64]*tg.User, cha
 	}
 
 	message := &types.Message{
-		ID:           int64(msg.ID),
-		ChatID:       chatID,
-		Content:      c.convertMessageContent(msg),
-		Date:         c.convertDate(msg.Date),
-		IsOutgoing:   msg.Out,
+		ID:            int64(msg.ID),
+		ChatID:        chatID,
+		Content:       c.convertMessageContent(msg),
+		Date:          c.convertDate(msg.Date),
+		IsOutgoing:    msg.Out,
 		IsChannelPost: msg.Post,
-		IsPinned:     msg.Pinned,
-		IsEdited:     msg.EditDate != 0,
-		Views:        msg.Views,
-		MediaAlbumID: msg.GroupedID,
+		IsPinned:      msg.Pinned,
+		IsEdited:      msg.EditDate != 0,
+		Views:         msg.Views,
+		MediaAlbumID:  msg.GroupedID,
 	}
 
 	// Set edit date if edited
@@ -617,9 +617,9 @@ func (c *Client) SendMessage(chat *types.Chat, text string, replyToMessageID int
 
 	// Build request
 	request := &tg.MessagesSendMessageRequest{
-		Peer:     inputPeer,
-		Message:  text,
-		RandomID: randomID,
+		Peer:      inputPeer,
+		Message:   text,
+		RandomID:  randomID,
 		NoWebpage: false,
 	}
 

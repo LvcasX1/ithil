@@ -5,18 +5,18 @@ import "time"
 
 // User represents a Telegram user.
 type User struct {
-	ID             int64
-	FirstName      string
-	LastName       string
-	Username       string
-	PhoneNumber    string
-	ProfilePhotoID string
-	Status         UserStatus
-	IsBot          bool
-	IsContact      bool
+	ID              int64
+	FirstName       string
+	LastName        string
+	Username        string
+	PhoneNumber     string
+	ProfilePhotoID  string
+	Status          UserStatus
+	IsBot           bool
+	IsContact       bool
 	IsMutualContact bool
-	IsVerified     bool
-	IsPremium      bool
+	IsVerified      bool
+	IsPremium       bool
 }
 
 // GetDisplayName returns the best available display name for the user.
@@ -47,20 +47,20 @@ const (
 
 // Chat represents a Telegram chat (private, group, supergroup, or channel).
 type Chat struct {
-	ID                int64
-	Type              ChatType
-	Title             string
-	Username          string
-	PhotoID           string
-	LastMessage       *Message
-	UnreadCount       int
-	IsPinned          bool
-	IsMuted           bool
-	DraftMessage      string
-	LastReadInboxID   int64
-	LastReadOutboxID  int64
-	AccessHash        int64 // Required for API calls to users and channels
-	UserStatus        UserStatus // Online status for private chats
+	ID                   int64
+	Type                 ChatType
+	Title                string
+	Username             string
+	PhotoID              string
+	LastMessage          *Message
+	UnreadCount          int
+	IsPinned             bool
+	IsMuted              bool
+	DraftMessage         string
+	LastReadInboxID      int64
+	LastReadOutboxID     int64
+	AccessHash           int64      // Required for API calls to users and channels
+	UserStatus           UserStatus // Online status for private chats
 	NotificationSettings *NotificationSettings
 }
 
@@ -77,36 +77,36 @@ const (
 
 // Message represents a Telegram message.
 type Message struct {
-	ID              int64
-	ChatID          int64
-	SenderID        int64
-	Content         MessageContent
-	Date            time.Time
-	EditDate        time.Time
-	IsOutgoing      bool
-	IsChannelPost   bool
-	IsPinned        bool
-	IsEdited        bool
-	IsForwarded     bool
+	ID               int64
+	ChatID           int64
+	SenderID         int64
+	Content          MessageContent
+	Date             time.Time
+	EditDate         time.Time
+	IsOutgoing       bool
+	IsChannelPost    bool
+	IsPinned         bool
+	IsEdited         bool
+	IsForwarded      bool
 	ReplyToMessageID int64
-	ForwardInfo     *ForwardInfo
-	Views           int
-	MediaAlbumID    int64
+	ForwardInfo      *ForwardInfo
+	Views            int
+	MediaAlbumID     int64
 }
 
 // MessageContent represents the content of a message.
 type MessageContent struct {
-	Type        MessageType
-	Text        string
-	Caption     string
-	Entities    []MessageEntity
-	Media       *Media
-	Location    *Location
-	Contact     *Contact
-	Poll        *Poll
-	Sticker     *Sticker
-	Animation   *Animation
-	Document    *Document
+	Type      MessageType
+	Text      string
+	Caption   string
+	Entities  []MessageEntity
+	Media     *Media
+	Location  *Location
+	Contact   *Contact
+	Poll      *Poll
+	Sticker   *Sticker
+	Animation *Animation
+	Document  *Document
 }
 
 // MessageType represents the type of message content.
@@ -161,15 +161,15 @@ const (
 
 // Media represents media content in a message.
 type Media struct {
-	ID       string
-	Width    int
-	Height   int
-	Duration int
-	Size     int64
-	MimeType string
-	Thumbnail *Thumbnail
-	LocalPath string
-	RemotePath string
+	ID           string
+	Width        int
+	Height       int
+	Duration     int
+	Size         int64
+	MimeType     string
+	Thumbnail    *Thumbnail
+	LocalPath    string
+	RemotePath   string
 	IsDownloaded bool
 }
 
@@ -182,11 +182,11 @@ type Thumbnail struct {
 
 // ForwardInfo contains information about forwarded messages.
 type ForwardInfo struct {
-	Origin      ForwardOrigin
-	FromChatID  int64
-	FromUserID  int64
-	MessageID   int64
-	Date        time.Time
+	Origin          ForwardOrigin
+	FromChatID      int64
+	FromUserID      int64
+	MessageID       int64
+	Date            time.Time
 	AuthorSignature string
 }
 
@@ -245,14 +245,14 @@ const (
 
 // Sticker represents a sticker in a message.
 type Sticker struct {
-	SetID    int64
-	Width    int
-	Height   int
-	Emoji    string
+	SetID      int64
+	Width      int
+	Height     int
+	Emoji      string
 	IsAnimated bool
-	IsVideo  bool
-	Thumbnail *Thumbnail
-	File     *Media
+	IsVideo    bool
+	Thumbnail  *Thumbnail
+	File       *Media
 }
 
 // Animation represents an animation (GIF) in a message.
@@ -276,12 +276,12 @@ type Document struct {
 
 // NotificationSettings represents notification settings for a chat.
 type NotificationSettings struct {
-	MuteFor           int
-	Sound             string
-	ShowPreview       bool
-	UseDefaultSound   bool
-	DisablePinned     bool
-	DisableMention    bool
+	MuteFor         int
+	Sound           string
+	ShowPreview     bool
+	UseDefaultSound bool
+	DisablePinned   bool
+	DisableMention  bool
 }
 
 // Draft represents a draft message in a chat.
@@ -293,16 +293,16 @@ type Draft struct {
 
 // ChatFilter represents a custom chat folder/filter.
 type ChatFilter struct {
-	ID              int32
-	Title           string
-	IconName        string
-	IncludedChatIDs []int64
-	ExcludedChatIDs []int64
-	IncludeContacts bool
+	ID                 int32
+	Title              string
+	IconName           string
+	IncludedChatIDs    []int64
+	ExcludedChatIDs    []int64
+	IncludeContacts    bool
 	IncludeNonContacts bool
-	IncludeGroups   bool
-	IncludeChannels bool
-	IncludeBots     bool
+	IncludeGroups      bool
+	IncludeChannels    bool
+	IncludeBots        bool
 }
 
 // AuthState represents the authentication state.

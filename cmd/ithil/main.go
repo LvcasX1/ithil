@@ -18,10 +18,10 @@ import (
 )
 
 var (
-	version = "0.1.0"
-	configPath = flag.String("config", "", "Path to config file")
+	version     = "0.1.0"
+	configPath  = flag.String("config", "", "Path to config file")
 	showVersion = flag.Bool("version", false, "Show version information")
-	showHelp = flag.Bool("help", false, "Show help message")
+	showHelp    = flag.Bool("help", false, "Show help message")
 )
 
 func main() {
@@ -56,9 +56,9 @@ func main() {
 
 	// Initialize Telegram client
 	telegramConfig := &telegram.Config{
-		APIID:            application.Config.Telegram.APIID,
-		APIHash:          application.Config.Telegram.APIHash,
-		SessionFile:      application.Config.Telegram.SessionFile,
+		APIID:             application.Config.Telegram.APIID,
+		APIHash:           application.Config.Telegram.APIHash,
+		SessionFile:       application.Config.Telegram.SessionFile,
 		DatabaseDirectory: application.Config.Telegram.DatabaseDirectory,
 	}
 	client, err := telegram.New(
