@@ -114,24 +114,29 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "ctrl+q":
 			return m, tea.Quit
 		case "?":
-			m.showHelp = !m.showHelp
-			return m, nil
+			// Only toggle help if input is not focused (so users can type "?" in messages)
+			if m.authenticated && m.conversation != nil && !m.conversation.input.Focused {
+				m.showHelp = !m.showHelp
+				return m, nil
+			}
 		case "ctrl+s":
 			m.sidebar.ToggleVisible()
 			return m, m.recalculateLayout()
 		case "S":
-			// Toggle stealth mode
-			m.config.Privacy.StealthMode = !m.config.Privacy.StealthMode
-			// Update status bar or show notification
-			stealthStatus := "disabled"
-			if m.config.Privacy.StealthMode {
-				stealthStatus = "enabled"
+			// Only toggle stealth mode if input is not focused (so users can type "S" in messages)
+			if m.authenticated && m.conversation != nil && !m.conversation.input.Focused {
+				m.config.Privacy.StealthMode = !m.config.Privacy.StealthMode
+				// Update status bar or show notification
+				stealthStatus := "disabled"
+				if m.config.Privacy.StealthMode {
+					stealthStatus = "enabled"
+				}
+				m.statusBar.SetMessage("Stealth mode " + stealthStatus)
+				// Clear message after 3 seconds
+				return m, tea.Tick(time.Second*3, func(t time.Time) tea.Msg {
+					return clearStatusMsg{}
+				})
 			}
-			m.statusBar.SetMessage("Stealth mode " + stealthStatus)
-			// Clear message after 3 seconds
-			return m, tea.Tick(time.Second*3, func(t time.Time) tea.Msg {
-				return clearStatusMsg{}
-			})
 		}
 
 		// If not authenticated, let auth model handle it
@@ -193,6 +198,13 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update all sub-models
 		m.conversation.SetCurrentChat(msg.chat)
 		m.sidebar.SetCurrentChat(msg.chat)
+
+		// Clear new message flag when opening a chat
+		if msg.chat.HasNewMessage {
+			msg.chat.HasNewMessage = false
+			m.cache.SetChat(msg.chat)
+			m.chatList.ClearNewMessageFlag(msg.chat.ID)
+		}
 
 		// Mark chat as read and clear unread count (only if stealth mode is disabled)
 		if msg.chat.UnreadCount > 0 && !m.config.Privacy.StealthMode {
@@ -691,6 +703,13 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 			chat.LastMessage = message
 			if !message.IsOutgoing {
 				chat.UnreadCount++
+				// Mark chat with new message flag if not currently viewing it
+				if m.currentChat == nil || m.currentChat.ID != chatID {
+					chat.HasNewMessage = true
+					m.cache.SetChat(chat)
+					// Move chat to top of list
+					m.chatList.MoveToTop(chatID)
+				}
 			}
 			m.chatList.UpdateChat(chat)
 

@@ -15,15 +15,17 @@ import (
 type ChatItemComponent struct {
 	Chat        *types.Chat
 	IsSelected  bool
+	IsFocused   bool
 	Width       int
 	ShowPreview bool
 }
 
 // NewChatItemComponent creates a new chat item component.
-func NewChatItemComponent(chat *types.Chat, isSelected bool, width int) *ChatItemComponent {
+func NewChatItemComponent(chat *types.Chat, isSelected bool, isFocused bool, width int) *ChatItemComponent {
 	return &ChatItemComponent{
 		Chat:        chat,
 		IsSelected:  isSelected,
+		IsFocused:   isFocused,
 		Width:       width,
 		ShowPreview: true,
 	}
@@ -50,13 +52,28 @@ func (c *ChatItemComponent) Render() string {
 	}
 
 	var itemStyle lipgloss.Style
-	if c.IsSelected {
-		// Selected: bright blue border, transparent background, compact padding
+	if c.IsSelected && c.IsFocused {
+		// Selected AND chat list is focused: bright blue border with thick emphasis
 		itemStyle = lipgloss.NewStyle().
 			Padding(0, 1).                                          // Compact padding for more vertical space
 			Border(lipgloss.ThickBorder()).                         // Thick border for emphasis
-			BorderForeground(lipgloss.Color(styles.BorderFocused)). // Bright blue for selection
+			BorderForeground(lipgloss.Color(styles.BorderFocused)). // Bright blue for active selection
 			Width(contentWidth)                                     // Content width: viewport width minus padding and borders
+	} else if c.IsSelected {
+		// Selected but chat list NOT focused: show selection with dimmer border
+		// This maintains visual indication of which chat is open
+		itemStyle = lipgloss.NewStyle().
+			Padding(0, 1).
+			Border(lipgloss.RoundedBorder()).                       // Rounded border (less emphasis than thick)
+			BorderForeground(lipgloss.Color(styles.AccentCyan)).    // Cyan to indicate selection
+			Width(contentWidth)
+	} else if c.Chat.HasNewMessage {
+		// New message: highlighted border with accent color
+		itemStyle = lipgloss.NewStyle().
+			Padding(0, 1).
+			Border(lipgloss.DoubleBorder()).                        // Double border for new message emphasis
+			BorderForeground(lipgloss.Color(styles.AccentCyan)).    // Cyan accent for new messages
+			Width(contentWidth)
 	} else {
 		// Unselected: subtle border, transparent background, compact padding
 		itemStyle = lipgloss.NewStyle().
@@ -142,20 +159,24 @@ func (c *ChatItemComponent) buildFirstLine() string {
 		title = fmt.Sprintf("Chat %d", c.Chat.ID)
 	}
 
-	var titleStyle lipgloss.Style
-	if c.IsSelected {
-		titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(styles.TextBright)).
-			Bold(true)
-	} else {
-		titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(styles.TextBright)).
-			Bold(true)
-	}
+	// Title is always bright and bold, selection is shown via border
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.TextBright)).
+		Bold(true)
 	parts = append(parts, titleStyle.Render(utils.TruncateString(title, c.Width-20)))
 
 	// Status indicators as badges
 	var badges []string
+	// NEW badge for chats with new messages (always first)
+	if c.Chat.HasNewMessage {
+		newBadge := lipgloss.NewStyle().
+			Background(lipgloss.Color(styles.AccentCyan)).
+			Foreground(lipgloss.Color(styles.ColorBlack)).
+			Padding(0, 1).
+			Bold(true).
+			Render("NEW")
+		badges = append(badges, newBadge)
+	}
 	if c.Chat.IsPinned {
 		badges = append(badges, "📌")
 	}
@@ -176,8 +197,13 @@ func (c *ChatItemComponent) buildFirstLine() string {
 		if c.Chat.UnreadCount > 99 {
 			unreadText = "99+"
 		}
+		// Use brighter color for new message unread count
+		bgColor := styles.AccentRed
+		if c.Chat.HasNewMessage {
+			bgColor = styles.AccentCyan // Cyan background for new messages
+		}
 		unreadBadge := lipgloss.NewStyle().
-			Background(lipgloss.Color(styles.AccentRed)).
+			Background(lipgloss.Color(bgColor)).
 			Foreground(lipgloss.Color(styles.ColorBlack)).
 			Padding(0, 1).
 			Bold(true).
@@ -188,8 +214,9 @@ func (c *ChatItemComponent) buildFirstLine() string {
 	// Timestamp of last message
 	if c.Chat.LastMessage != nil {
 		timestamp := utils.FormatTimestamp(c.Chat.LastMessage.Date, true)
+		// Timestamp color depends on whether chat list is focused AND selected
 		var timestampStyle lipgloss.Style
-		if c.IsSelected {
+		if c.IsSelected && c.IsFocused {
 			timestampStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.TextPrimary))
 		} else {
 			timestampStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.TextSecondary))
@@ -278,8 +305,9 @@ func (c *ChatItemComponent) buildPreview() string {
 	preview = utils.TruncateString(preview, maxLen)
 
 	// Style the preview with appropriate color
+	// Only brighten if chat list is focused AND selected
 	var previewStyle lipgloss.Style
-	if c.IsSelected {
+	if c.IsSelected && c.IsFocused {
 		previewStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color(styles.TextPrimary)).
 			Italic(true)
@@ -321,7 +349,8 @@ func (c *ChatItemComponent) buildMetadata() string {
 
 	if chatTypeStr != "" {
 		var typeStyle lipgloss.Style
-		if c.IsSelected {
+		// Only brighten if chat list is focused AND selected
+		if c.IsSelected && c.IsFocused {
 			typeStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(styles.AccentBlue)).
 				Bold(false)
@@ -337,7 +366,8 @@ func (c *ChatItemComponent) buildMetadata() string {
 	if c.Chat.LastMessage != nil && c.Chat.LastMessage.ID > 0 {
 		msgCountStr := fmt.Sprintf("%d messages", c.Chat.LastMessage.ID)
 		var msgStyle lipgloss.Style
-		if c.IsSelected {
+		// Only brighten if chat list is focused AND selected
+		if c.IsSelected && c.IsFocused {
 			msgStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.AccentBlue))
 		} else {
 			msgStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.TextSecondary))
