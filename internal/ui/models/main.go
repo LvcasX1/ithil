@@ -387,6 +387,34 @@ func (m *MainModel) renderMainUIContent() string {
 		sidebarView = m.sidebar.View()
 	}
 
+	// DEBUG: Log view details before joining
+	f, _ := os.OpenFile("/tmp/ithil-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		chatListLines := strings.Split(chatListView, "\n")
+		conversationLines := strings.Split(conversationView, "\n")
+		fmt.Fprintf(f, "=== JoinHorizontal Debug ===\n")
+		fmt.Fprintf(f, "ChatList:\n")
+		fmt.Fprintf(f, "  Total lines: %d\n", len(chatListLines))
+		for i := 0; i < 3 && i < len(chatListLines); i++ {
+			fmt.Fprintf(f, "  Line %d: %q (display width=%d)\n", i, chatListLines[i], lipgloss.Width(chatListLines[i]))
+		}
+		fmt.Fprintf(f, "Conversation:\n")
+		fmt.Fprintf(f, "  Total lines: %d\n", len(conversationLines))
+		for i := 0; i < 3 && i < len(conversationLines); i++ {
+			fmt.Fprintf(f, "  Line %d: %q (display width=%d)\n", i, conversationLines[i], lipgloss.Width(conversationLines[i]))
+		}
+		if m.sidebar.IsVisible() {
+			sidebarLines := strings.Split(sidebarView, "\n")
+			fmt.Fprintf(f, "Sidebar:\n")
+			fmt.Fprintf(f, "  Total lines: %d\n", len(sidebarLines))
+			for i := 0; i < 3 && i < len(sidebarLines); i++ {
+				fmt.Fprintf(f, "  Line %d: %q (display width=%d)\n", i, sidebarLines[i], lipgloss.Width(sidebarLines[i]))
+			}
+		}
+		fmt.Fprintf(f, "\n")
+		f.Close()
+	}
+
 	// Combine panes horizontally
 	var content string
 	if m.sidebar.IsVisible() {
@@ -429,9 +457,33 @@ func (m *MainModel) recalculateLayout() tea.Cmd {
 	if !m.sidebar.IsVisible() {
 		conversationWidth = m.width - chatListWidth
 		sidebarWidth = 0
+	} else {
+		// When sidebar is visible, ensure total width matches terminal width exactly
+		// by giving any remaining width to the conversation pane
+		total := chatListWidth + conversationWidth + sidebarWidth
+		if total != m.width {
+			conversationWidth += m.width - total
+		}
 	}
 
-	statusBarHeight := 1
+	// DEBUG: Log layout calculations
+	f, _ := os.OpenFile("/tmp/ithil-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if f != nil {
+		total := chatListWidth + conversationWidth + sidebarWidth
+		fmt.Fprintf(f, "=== recalculateLayout [AFTER FIX] ===\n")
+		fmt.Fprintf(f, "Terminal: width=%d, height=%d\n", m.width, m.height)
+		fmt.Fprintf(f, "Sidebar visible: %v\n", m.sidebar.IsVisible())
+		fmt.Fprintf(f, "Final widths:\n")
+		fmt.Fprintf(f, "  ChatList: %d\n", chatListWidth)
+		fmt.Fprintf(f, "  Conversation: %d\n", conversationWidth)
+		fmt.Fprintf(f, "  Sidebar: %d\n", sidebarWidth)
+		fmt.Fprintf(f, "  Total: %d (should equal terminal width: %d) ✓\n", total, m.width)
+		fmt.Fprintf(f, "\n")
+		f.Close()
+	}
+
+	// Status bar takes 2 lines: 1 border + 1 content
+	statusBarHeight := 2
 	contentHeight := m.height - statusBarHeight
 
 	// Update all sub-models
