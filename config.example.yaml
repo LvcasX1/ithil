@@ -1,0 +1,59 @@
+# Ithil Configuration File
+# Copy this to config.yaml and fill in your values
+
+app:
+  name: "Ithil"
+  version: "0.1.0"
+
+telegram:
+  api_id: "YOUR_API_ID"              # Get from https://my.telegram.org
+  api_hash: "YOUR_API_HASH"          # Get from https://my.telegram.org
+  session_file: "~/.config/ithil/session.json"
+  database_directory: "~/.config/ithil/tdlib"
+
+ui:
+  theme: "dark"  # dark, light, nord
+
+  layout:
+    chat_list_width: 25    # percentage
+    conversation_width: 50
+    info_width: 25
+    show_info_pane: true
+
+  appearance:
+    show_avatars: true
+    show_status_bar: true
+    date_format: "12h"  # 12h or 24h
+    relative_timestamps: true
+    message_preview_length: 50
+
+  behavior:
+    send_on_enter: true  # false for Ctrl+Enter
+    auto_download_limit: 5242880  # 5MB in bytes
+    mark_read_on_scroll: true
+    emoji_style: "unicode"  # unicode or ascii
+
+  keyboard:
+    vim_mode: true  # j/k navigation
+    custom_bindings: {}
+
+notifications:
+  enabled: true
+  sound: true
+  desktop: false
+  muted_chats: []
+
+privacy:
+  stealth_mode: false          # Toggle with 'S' key - disables read receipts and typing indicators
+  show_online_status: true
+  show_read_receipts: true
+  show_typing: true
+
+cache:
+  max_messages_per_chat: 1000
+  max_media_size: 104857600  # 100MB
+  media_directory: "~/.cache/ithil/media"
+
+logging:
+  level: "info"  # debug, info, warn, error
+  file: "~/.config/ithil/ithil.log"
