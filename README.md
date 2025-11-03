@@ -10,11 +10,11 @@
 
 Ithil is in **active development** and already functional for daily use! The core messaging features are complete and stable:
 
-✅ **Working:** Authentication, real-time messaging, chat management, message history, read receipts, typing indicators, message editing, rich text formatting, stealth mode
+✅ **Working:** Authentication, real-time messaging, chat management, message history, read receipts, typing indicators, message editing, rich text formatting, stealth mode, media support (images, audio, video), voice messages, video notes
 
-🚧 **In Progress:** Media download/display, message reactions, advanced chat operations
+🚧 **In Progress:** Message reactions, message forwarding, message deletion
 
-🔜 **Planned:** Notifications, search, voice messages, multiple themes
+🔜 **Planned:** Notifications, advanced search, inline bots, secret chats, multiple themes
 
 The application uses the official Telegram MTProto protocol via gotd/td and implements a sophisticated update handling system for reliable real-time messaging. With ~8,500 lines of well-structured Go code, Ithil demonstrates modern TUI development practices with the Elm Architecture pattern.
 
@@ -36,7 +36,9 @@ The application uses the official Telegram MTProto protocol via gotd/td and impl
 
 ### ✨ Rich Messaging
 - **Message Formatting**: Bold, italic, code blocks, links, mentions, and more
-- **Media Detection**: Recognizes photos, videos, documents, stickers, animations
+- **Media Support**: Full support for photos, videos, documents, stickers, animations
+- **Voice & Video Notes**: Audio playback with waveform visualization for voice messages and video notes
+- **Image Rendering**: Display images in terminal using Kitty/Sixel protocols or Unicode half-blocks
 - **Special Content**: Polls, contacts, locations, and forwarded messages
 - **Message Editing**: Edit your sent messages
 - **Reply Support**: Reply to specific messages in conversations
@@ -58,8 +60,9 @@ The application uses the official Telegram MTProto protocol via gotd/td and impl
 - **Local Caching**: Message and user caching for instant access
 - **Efficient Updates**: Gaps-aware update handler for reliable message delivery
 - **Low Resource Usage**: Minimal dependencies and memory footprint
-- **Optimized Navigation**: Advanced keyboard shortcuts for 80-90% faster navigation
+- **Optimized Navigation**: Centered message selection with smooth scrolling
 - **Smart Search**: Real-time chat filtering for instant access to any conversation
+- **Media Rendering**: Fast image rendering with multiple protocol support (Kitty, Sixel, Unicode)
 
 ## Screenshots
 
@@ -262,10 +265,12 @@ ithil -help
 
 #### Conversation Navigation
 
+**Note:** The conversation view uses a **centered selection cursor** (▶) that keeps the selected message in the middle of the viewport for maximum visibility.
+
 | Key | Action |
 |-----|--------|
-| `j`, `↓` | Select next message (moves ▶ cursor) |
-| `k`, `↑` | Select previous message (moves ▶ cursor) |
+| `j`, `↓` | Select next message (moves ▶ cursor, keeps centered) |
+| `k`, `↑` | Select previous message (moves ▶ cursor, keeps centered) |
 | `Ctrl+U` | Scroll up half page |
 | `Ctrl+D` | Scroll down half page |
 | `Ctrl+B`, `PgUp` | Scroll up full page |
@@ -273,7 +278,7 @@ ithil -help
 | `g`, `Home` | Go to top |
 | `G`, `End` | Go to bottom |
 | `i`, `a` | Focus input field |
-| `Enter` | View media for selected message |
+| `Enter` | View/play media for selected message |
 
 #### Message Actions
 
@@ -322,7 +327,13 @@ ithil/
 │   │   ├── messages.go     # Message operations (send, edit, get)
 │   │   ├── chats.go        # Chat operations (list, get, search)
 │   │   ├── updates.go      # Real-time update handler
-│   │   └── session.go      # Session storage and management
+│   │   ├── session.go      # Session storage and management
+│   │   └── media.go        # Media download/upload manager
+│   ├── media/              # Media rendering and playback
+│   │   ├── audio_player.go    # Beep-based audio playback
+│   │   ├── audio_renderer.go  # Waveform visualization and playback UI
+│   │   ├── image_renderer.go  # Kitty/Sixel image rendering
+│   │   └── mosaic_renderer.go # Unicode half-block image rendering
 │   ├── ui/                 # User interface (Bubbletea)
 │   │   ├── models/         # Bubbletea models
 │   │   │   ├── main.go     # Root model with update routing
@@ -331,10 +342,15 @@ ithil/
 │   │   │   ├── conversation.go # Message view and input
 │   │   │   └── sidebar.go  # Info sidebar
 │   │   ├── components/     # Reusable UI components
-│   │   │   ├── statusbar.go # Status bar component
-│   │   │   ├── input.go    # Text input component
-│   │   │   ├── chatitem.go # Chat list item
-│   │   │   └── message.go  # Message bubble
+│   │   │   ├── statusbar.go  # Status bar component
+│   │   │   ├── input.go      # Text input component
+│   │   │   ├── chatitem.go   # Chat list item
+│   │   │   ├── message.go    # Message bubble
+│   │   │   ├── helpmodal.go  # Help modal with keyboard shortcuts
+│   │   │   ├── mediaviewer.go # Media viewer component
+│   │   │   ├── modal.go      # Generic modal component
+│   │   │   ├── filepicker.go # File picker component
+│   │   │   └── utils.go      # UI utility functions
 │   │   ├── styles/         # Lipgloss styles
 │   │   │   └── styles.go   # Color schemes and styling
 │   │   └── keys/           # Keyboard shortcuts
@@ -347,8 +363,13 @@ ithil/
 ├── pkg/
 │   └── types/              # Shared type definitions
 │       └── types.go        # Core types (Message, Chat, User, etc.)
+├── docs/                   # Documentation
+│   ├── FOCUS_FIX.md        # Focus management documentation
+│   ├── MEDIA_RENDERING.md  # Media rendering implementation details
+│   └── MEDIA_QUICK_START.md # Quick start guide for media features
 ├── .air.toml               # Hot-reload configuration for development
 ├── config.example.yaml     # Example configuration file
+├── CLAUDE.md               # Claude Code project instructions
 ├── go.mod                  # Go module definition
 ├── go.sum                  # Dependency checksums
 └── README.md               # This file
@@ -358,8 +379,10 @@ ithil/
 - `cmd/ithil/` - Entry point and CLI setup
 - `internal/telegram/` - All Telegram protocol operations (~2000 LOC)
 - `internal/ui/` - Complete TUI implementation (~4000 LOC)
+- `internal/media/` - Media rendering and audio playback (~800 LOC)
 - `internal/cache/` - Performance-critical caching layer
 - `pkg/types/` - Shared data structures (370 LOC)
+- `docs/` - Technical documentation
 
 **Total:** ~8,500 lines of Go code
 
@@ -419,12 +442,15 @@ Ithil follows the Elm Architecture pattern (Model-Update-View) using Bubbletea:
 1. **MainModel** (`internal/ui/models/main.go`): Root model coordinating all sub-models and handling Telegram updates
 2. **AuthModel** (`internal/ui/models/auth.go`): Interactive authentication flow (phone, code, 2FA, registration)
 3. **ChatListModel** (`internal/ui/models/chatlist.go`): Chat list management with real-time updates
-4. **ConversationModel** (`internal/ui/models/conversation.go`): Message display, input, and editing
+4. **ConversationModel** (`internal/ui/models/conversation.go`): Message display, input, and editing with centered selection
 5. **SidebarModel** (`internal/ui/models/sidebar.go`): Chat/user information and statistics
 6. **TelegramClient** (`internal/telegram/client.go`): Wrapper around gotd/td with MTProto implementation
 7. **UpdateHandler** (`internal/telegram/updates.go`): Real-time update processing and gap recovery
-8. **Cache** (`internal/cache/cache.go`): Local caching layer for messages, chats, and users
-9. **SessionStorage** (`internal/telegram/session.go`): Secure session and auth data persistence
+8. **MediaManager** (`internal/telegram/media.go`): Media download/upload operations
+9. **AudioPlayer** (`internal/media/audio_player.go`): Beep-based audio playback for voice messages
+10. **ImageRenderer** (`internal/media/image_renderer.go`): Multi-protocol image rendering (Kitty/Sixel/Unicode)
+11. **Cache** (`internal/cache/cache.go`): Local caching layer for messages, chats, and users
+12. **SessionStorage** (`internal/telegram/session.go`): Secure session and auth data persistence
 
 ### Data Flow
 
@@ -447,21 +473,23 @@ Ithil uses a sophisticated update handling system:
 3. **Cache Layer**: Stores messages, users, and chats for instant access
 4. **UI Updates**: Reactive updates trigger re-renders only when needed
 
-## Recent Enhancements (v0.2.0)
+## Recent Enhancements
 
-### Navigation Optimizations ✅
+### Media Support ✅ (v0.3.0)
+- **Image Rendering**: Display photos and stickers in terminal using Kitty/Sixel protocols or Unicode half-blocks
+- **Audio Playback**: Play voice messages and audio files with waveform visualization
+- **Video Notes**: Support for round video messages with preview and playback
+- **Media Viewer**: Dedicated media viewer component with keyboard navigation
+- **File Management**: Download and cache media files with configurable limits
+
+### Navigation Improvements ✅ (v0.2.0)
+- **Centered Selection**: Message selection cursor (▶) stays centered in viewport for better context
 - **Fast Chat Navigation**: `Ctrl+U`/`Ctrl+D` to jump 5 chats at a time
 - **Quick Access**: Number keys `1-9` for instant chat access
 - **Smart Search**: Press `/` to filter chats in real-time by name or content
-- **Half-Page Scrolling**: `Ctrl+U`/`Ctrl+D` in conversations for optimal speed
-- **Context-Aware Scrolling**: Maintains 2 items visible above/below selection
 - **Enhanced Vim Support**: Additional vim-style bindings for power users
 
-**Performance Impact**: 80-90% fewer keystrokes for common navigation tasks!
-
-For complete details, see:
-- [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md) - Full keyboard reference
-- [OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md) - Technical details and benchmarks
+For implementation details, see the `docs/` directory
 
 ## Roadmap
 
@@ -481,28 +509,31 @@ For complete details, see:
 - [x] Local message caching
 - [x] Session management
 
-### Phase 3: Rich Features 🚧 (In Progress)
+### Phase 3: Rich Features ✅ (Completed)
 - [x] Message editing
 - [x] Rich text formatting (bold, italic, code, links, etc.)
-- [x] Media support detection (photos, videos, documents, stickers, animations)
+- [x] Media support (photos, videos, documents, stickers, animations)
 - [x] Polls
 - [x] Contact messages
 - [x] Location messages
-- [ ] Media download and display
-- [ ] Message reactions
-- [ ] Message forwarding (stub implemented)
-- [ ] Message deletion (stub implemented)
+- [x] Media download and display
+- [x] Image rendering (Kitty/Sixel/Unicode)
+- [x] Audio playback with waveform visualization
+- [x] Video notes (round videos)
 
-### Phase 4: Advanced Features 🔜 (Planned)
+### Phase 4: Advanced Features 🚧 (In Progress)
 - [x] Read receipts
 - [x] Typing indicators
 - [x] User online/offline status
 - [x] Stealth mode (disable read receipts/typing)
-- [ ] Voice messages
-- [ ] Video messages
+- [x] Voice messages
+- [x] Video messages
+- [x] Chat pinning/muting/archiving
+- [ ] Message reactions (stub implemented)
+- [ ] Message forwarding (stub implemented)
+- [ ] Message deletion (stub implemented)
 - [ ] Inline bots
 - [ ] Secret chats
-- [ ] Chat pinning/muting/archiving (stub implemented)
 
 ### Phase 5: Polish 🔜 (Planned)
 - [ ] Notifications
@@ -533,6 +564,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 - [Lipgloss](https://github.com/charmbracelet/lipgloss) - Terminal styling and layout
 - [Bubbles](https://github.com/charmbracelet/bubbles) - Pre-built UI components (textarea, viewport, etc.)
 - [gotd/td](https://github.com/gotd/td) - Pure Go MTProto implementation for Telegram
+- [Beep](https://github.com/faiface/beep) - Audio playback library for voice messages
 
 ### Why gotd/td?
 
@@ -565,18 +597,22 @@ Ithil uses **gotd/td** instead of TDLib for several advantages:
 
 ### Message Handling
 - **Rich Content Support**: 13+ message entity types (bold, italic, links, mentions, code, etc.)
-- **Media Type Detection**: Automatic recognition of photos, videos, documents, stickers, animations, voice, video notes
+- **Media Type Support**: Full support for photos, videos, documents, stickers, animations, voice, video notes, audio
+- **Media Rendering**: In-terminal image display using Kitty/Sixel protocols or Unicode half-blocks
+- **Audio Playback**: Voice messages and audio files with waveform visualization using Beep library
 - **Special Messages**: Full support for polls, contacts, locations, forwarded messages
 - **Optimistic UI**: Sent messages appear instantly, confirmed by server asynchronously
+- **Centered Selection**: Message selection cursor stays centered for better context and visibility
 
 ### Performance Optimizations
 - **Lazy Loading**: Messages loaded on-demand as chats are opened
 - **Viewport Rendering**: Only visible messages rendered to terminal
 - **Efficient Re-renders**: Granular update messages prevent full UI redraws
 - **Local Cache**: In-memory cache with configurable limits for instant access
-- **Smart Navigation**: Context-aware scrolling with 2-item padding for better visibility
+- **Centered Selection**: Smart scrolling keeps selected message centered for optimal visibility
+- **Media Caching**: Downloaded media files cached locally for instant re-access
 - **Real-time Search**: O(n) filtering across titles, usernames, and message content
-- **Keyboard Efficiency**: 80-90% fewer keystrokes for common navigation tasks
+- **Async Media Loading**: Media downloads and renders in background without blocking UI
 
 ### Code Quality
 - **Clear Architecture**: Separation of concerns (UI, Business Logic, Protocol Layer)
