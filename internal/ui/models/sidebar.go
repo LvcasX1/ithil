@@ -33,7 +33,7 @@ func NewSidebarModel(cache *cache.Cache) *SidebarModel {
 
 	return &SidebarModel{
 		cache:    cache,
-		visible:  true,
+		visible:  false,
 		viewport: vp,
 	}
 }

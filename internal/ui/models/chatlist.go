@@ -25,6 +25,9 @@ type ChatListModel struct {
 	height        int
 	focused       bool
 	viewport      viewport.Model
+	searchMode    bool   // Whether search/filter mode is active
+	searchQuery   string // Current search query
+	filteredChats []*types.Chat
 }
 
 // NewChatListModel creates a new chat list model.
@@ -56,12 +59,52 @@ func (m *ChatListModel) Update(msg tea.Msg) (*ChatListModel, tea.Cmd) {
 			return m, nil
 		}
 
+		// Handle search mode separately
+		if m.searchMode {
+			switch msg.String() {
+			case "esc":
+				// Exit search mode
+				m.exitSearchMode()
+				return m, nil
+			case "enter":
+				// Open selected chat and exit search
+				m.exitSearchMode()
+				return m, m.openSelectedChat()
+			case "backspace":
+				// Remove last character from search
+				if len(m.searchQuery) > 0 {
+					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+					m.filterChats()
+				}
+				return m, nil
+			default:
+				// Add character to search query
+				if len(msg.String()) == 1 && msg.String()[0] >= 32 && msg.String()[0] <= 126 {
+					m.searchQuery += msg.String()
+					m.filterChats()
+				}
+				return m, nil
+			}
+		}
+
 		switch msg.String() {
 		case "up", "k":
 			m.moveUp()
 			return m, nil
 		case "down", "j":
 			m.moveDown()
+			return m, nil
+		case "ctrl+u":
+			// Move up 5 chats for faster navigation
+			for i := 0; i < 5 && m.selectedIndex > 0; i++ {
+				m.moveUp()
+			}
+			return m, nil
+		case "ctrl+d":
+			// Move down 5 chats for faster navigation
+			for i := 0; i < 5 && m.selectedIndex < len(m.chats)-1; i++ {
+				m.moveDown()
+			}
 			return m, nil
 		case "home", "g":
 			m.selectedIndex = 0
@@ -79,8 +122,21 @@ func (m *ChatListModel) Update(msg tea.Msg) (*ChatListModel, tea.Cmd) {
 		case "pgdown":
 			m.viewport.ViewDown()
 			return m, nil
-		case "enter":
+		case "enter", "l", "right":
 			return m, m.openSelectedChat()
+		case "/":
+			// Enter search mode
+			m.enterSearchMode()
+			return m, nil
+		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+			// Quick jump to chat by number (1-9)
+			idx := int(msg.String()[0] - '1')
+			if idx < len(m.chats) {
+				m.selectedIndex = idx
+				m.updateViewport()
+				return m, m.openSelectedChat()
+			}
+			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
@@ -130,6 +186,9 @@ func (m *ChatListModel) View() string {
 
 	// Create custom top border with embedded title
 	title := " 📋 CHATS "
+	if m.searchMode {
+		title = " 🔍 SEARCH: " + m.searchQuery + "_ "
+	}
 	// Use lipgloss.Width() for accurate display width
 	titleLen := lipgloss.Width(title)
 
@@ -157,7 +216,7 @@ func (m *ChatListModel) View() string {
 	leftBorder := lipgloss.NewStyle().Foreground(borderColor).Render("│")
 	rightBorder := lipgloss.NewStyle().Foreground(borderColor).Render("│")
 
-	// Wrap viewport content with side borders
+	// Wrap viewport content with side borders - minimal padding for max space
 	contentLines := strings.Split(viewportContent, "\n")
 	var borderedLines []string
 	for _, line := range contentLines {
@@ -286,12 +345,18 @@ func (m *ChatListModel) renderEmpty() string {
 
 // renderAllChats renders all chat items for the viewport.
 func (m *ChatListModel) renderAllChats() string {
-	if len(m.chats) == 0 {
+	// Use active chats (filtered or all)
+	activeChats := m.getActiveChats()
+
+	if len(activeChats) == 0 {
+		if m.searchMode {
+			return styles.DimStyle.Render("No chats match your search")
+		}
 		return styles.DimStyle.Render("No chats yet")
 	}
 
 	var chatViews []string
-	for i, chat := range m.chats {
+	for i, chat := range activeChats {
 		// Show selection highlighting even when chat list is not focused
 		// This maintains visual indication of which chat is currently open
 		isSelected := i == m.selectedIndex
@@ -301,7 +366,8 @@ func (m *ChatListModel) renderAllChats() string {
 		chatViews = append(chatViews, chatItem.Render())
 	}
 
-	return strings.Join(chatViews, "\n") // Compact spacing between chats
+	// Compact layout: items are now tighter with consistent margins
+	return strings.Join(chatViews, "\n")
 }
 
 // updateViewport updates the viewport content and scrolls to selected item.
@@ -310,22 +376,33 @@ func (m *ChatListModel) updateViewport() {
 	m.viewport.SetContent(content)
 
 	// Calculate line position to scroll to selected item
-	// Each chat item is now approximately 6 lines:
-	// - Top border (1 line)
-	// - Title line with padding (1 line)
-	// - Preview line with padding (1 line)
-	// - Metadata line with padding (1 line)
-	// - Bottom border (1 line)
-	// - Single newline spacing (1 line)
+	// Each chat item is 4 lines total:
+	// - Top border line (1 line)
+	// - Title line (1 line)
+	// - Preview + metadata combined line (1 line)
+	// - Bottom border line (1 line)
+	// Note: ALL items have borders (selected = visible, unselected = invisible)
+	// This ensures consistent dimensions and prevents visual shifting
 	if m.selectedIndex >= 0 && m.selectedIndex < len(m.chats) {
-		linePos := m.selectedIndex * 6
+		linePos := m.selectedIndex * 4
 		targetOffset := linePos
 
-		// Keep selected item in view
+		// Optimized scrolling: Keep selected item visible with smooth transitions
+		// Add padding to keep selected item away from edges for better visibility
+		visiblePadding := 1 // Keep 1 item visible above/below when possible
+
 		if targetOffset < m.viewport.YOffset {
-			m.viewport.YOffset = targetOffset
+			// Scrolling up
+			m.viewport.YOffset = targetOffset - (visiblePadding * 4)
+			if m.viewport.YOffset < 0 {
+				m.viewport.YOffset = 0
+			}
 		} else if targetOffset >= m.viewport.YOffset+m.viewport.Height {
-			m.viewport.YOffset = targetOffset - m.viewport.Height + 6
+			// Scrolling down
+			m.viewport.YOffset = targetOffset - m.viewport.Height + 4 + (visiblePadding * 4)
+			if m.viewport.YOffset < 0 {
+				m.viewport.YOffset = 0
+			}
 		}
 	}
 }
@@ -340,7 +417,8 @@ func (m *ChatListModel) moveUp() {
 
 // moveDown moves the selection down.
 func (m *ChatListModel) moveDown() {
-	if m.selectedIndex < len(m.chats)-1 {
+	activeChats := m.getActiveChats()
+	if m.selectedIndex < len(activeChats)-1 {
 		m.selectedIndex++
 		m.updateViewport()
 	}
@@ -348,11 +426,12 @@ func (m *ChatListModel) moveDown() {
 
 // openSelectedChat opens the currently selected chat.
 func (m *ChatListModel) openSelectedChat() tea.Cmd {
-	if m.selectedIndex < 0 || m.selectedIndex >= len(m.chats) {
+	activeChats := m.getActiveChats()
+	if m.selectedIndex < 0 || m.selectedIndex >= len(activeChats) {
 		return nil
 	}
 
-	selectedChat := m.chats[m.selectedIndex]
+	selectedChat := activeChats[m.selectedIndex]
 	return func() tea.Msg {
 		return chatSelectedMsg{chat: selectedChat}
 	}
@@ -360,10 +439,11 @@ func (m *ChatListModel) openSelectedChat() tea.Cmd {
 
 // GetSelectedChat returns the currently selected chat.
 func (m *ChatListModel) GetSelectedChat() *types.Chat {
-	if m.selectedIndex < 0 || m.selectedIndex >= len(m.chats) {
+	activeChats := m.getActiveChats()
+	if m.selectedIndex < 0 || m.selectedIndex >= len(activeChats) {
 		return nil
 	}
-	return m.chats[m.selectedIndex]
+	return activeChats[m.selectedIndex]
 }
 
 // SetChats sets the list of chats.
@@ -384,8 +464,8 @@ func (m *ChatListModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 
-	// Reserve space for borders only (title is now embedded in border)
-	m.viewport.Width = width - 4   // Account for borders and horizontal padding (left border + left padding + right padding + right border)
+	// Reserve minimal space for borders - maximize horizontal usage
+	m.viewport.Width = width - 4   // Account for left border (1) + left padding (1) + right padding (1) + right border (1)
 	m.viewport.Height = height - 2 // Account for top border (1) + bottom border (1)
 
 	m.updateViewport()
@@ -465,6 +545,62 @@ func (m *ChatListModel) ClearNewMessageFlag(chatID int64) {
 	}
 	m.sortChats()
 	m.updateViewport()
+}
+
+// enterSearchMode activates search/filter mode for quick chat finding.
+func (m *ChatListModel) enterSearchMode() {
+	m.searchMode = true
+	m.searchQuery = ""
+	m.filteredChats = m.chats
+}
+
+// exitSearchMode deactivates search mode and restores full chat list.
+func (m *ChatListModel) exitSearchMode() {
+	m.searchMode = false
+	m.searchQuery = ""
+	m.filteredChats = nil
+	m.updateViewport()
+}
+
+// filterChats filters the chat list based on the search query.
+func (m *ChatListModel) filterChats() {
+	if m.searchQuery == "" {
+		m.filteredChats = m.chats
+		m.selectedIndex = 0
+		m.updateViewport()
+		return
+	}
+
+	query := strings.ToLower(m.searchQuery)
+	m.filteredChats = []*types.Chat{}
+
+	for _, chat := range m.chats {
+		// Search in chat title
+		if strings.Contains(strings.ToLower(chat.Title), query) {
+			m.filteredChats = append(m.filteredChats, chat)
+			continue
+		}
+		// Search in chat username
+		if chat.Username != "" && strings.Contains(strings.ToLower(chat.Username), query) {
+			m.filteredChats = append(m.filteredChats, chat)
+			continue
+		}
+		// Search in last message text
+		if chat.LastMessage != nil && strings.Contains(strings.ToLower(chat.LastMessage.Content.Text), query) {
+			m.filteredChats = append(m.filteredChats, chat)
+		}
+	}
+
+	m.selectedIndex = 0
+	m.updateViewport()
+}
+
+// getActiveChats returns the currently displayed chats (filtered or all).
+func (m *ChatListModel) getActiveChats() []*types.Chat {
+	if m.searchMode && m.filteredChats != nil {
+		return m.filteredChats
+	}
+	return m.chats
 }
 
 // Messages for chat list updates.

@@ -44,10 +44,9 @@ func (m *MessageComponent) Render() string {
 		return ""
 	}
 
-	// Build message content
 	var contentBuilder strings.Builder
 
-	// Build message header (sender name + timestamp)
+	// Build message header (sender name + timestamp + edited indicator)
 	header := m.renderHeader()
 	if header != "" {
 		contentBuilder.WriteString(header)
@@ -56,67 +55,37 @@ func (m *MessageComponent) Render() string {
 
 	// Render reply if present
 	if m.Message.ReplyToMessageID != 0 {
-		contentBuilder.WriteString(m.renderReply())
+		reply := m.renderReply()
+		// Indent reply slightly
+		indentedReply := indentText(reply, 2)
+		contentBuilder.WriteString(indentedReply)
 		contentBuilder.WriteString("\n")
 	}
 
-	// Render main content
+	// Render main content (indented)
 	content := m.renderContent()
-	contentBuilder.WriteString(content)
+	indentedContent := indentText(content, 2)
+	contentBuilder.WriteString(indentedContent)
 
-	// Render footer (edited indicator, views, etc.)
+	// Render footer (views, pinned, etc. - but NOT edited, that's in header)
 	footer := m.renderFooter()
 	if footer != "" {
 		contentBuilder.WriteString("\n")
-		contentBuilder.WriteString(footer)
+		// Indent footer to align with content
+		indentedFooter := indentText(footer, 2)
+		contentBuilder.WriteString(indentedFooter)
 	}
 
-	messageContent := contentBuilder.String()
-
-	// Choose style based on message direction
-	var messageStyle lipgloss.Style
-
-	// Message bubble max width (use nearly full width with small margins)
-	// Leave 4 chars total (2 on each side) for equal margins
-	bubbleMaxWidth := m.Width - 4
-	if bubbleMaxWidth < 30 {
-		bubbleMaxWidth = 30
-	}
-
-	// Get user-specific border color
-	borderColor := getUserColor(m.Message.SenderID)
-
-	if m.Message.IsOutgoing {
-		// Outgoing messages: left-aligned, adapt to content width
-		messageStyle = styles.MessageOutgoingStyle.
-			MaxWidth(bubbleMaxWidth).
-			BorderForeground(borderColor)
-	} else {
-		// Incoming messages: left-aligned, adapt to content width
-		messageStyle = styles.MessageIncomingStyle.
-			MaxWidth(bubbleMaxWidth).
-			BorderForeground(borderColor)
-	}
-
-	// Render the message bubble
-	bubble := messageStyle.Render(messageContent)
-
-	// Add small left margin for equal spacing on both sides
-	container := lipgloss.NewStyle().
-		PaddingLeft(2)
-
-	return container.Render(bubble)
+	return contentBuilder.String()
 }
 
 // renderHeader renders the message header (sender name and timestamp).
 func (m *MessageComponent) renderHeader() string {
-	var parts []string
-
-	// Add sender name
+	// Determine sender name
 	var senderName string
 	if m.Message.IsOutgoing {
-		// Show "Me" for own messages
-		senderName = "Me"
+		// Show "You" for own messages (matching screenshot)
+		senderName = "You"
 	} else {
 		// Use provided sender name or fallback to User ID
 		if m.SenderName != "" {
@@ -125,17 +94,27 @@ func (m *MessageComponent) renderHeader() string {
 			senderName = fmt.Sprintf("User %d", m.Message.SenderID)
 		}
 	}
-	parts = append(parts, styles.SenderNameStyle.Render(senderName))
 
-	// Add timestamp
+	// Format timestamp
 	timestamp := utils.FormatTimestamp(m.Message.Date, true)
-	parts = append(parts, styles.TimestampStyle.Render(timestamp))
 
-	if len(parts) == 0 {
-		return ""
+	// Get user-specific color for the sender name
+	userColor := getUserColor(m.Message.SenderID)
+	senderStyle := lipgloss.NewStyle().
+		Foreground(userColor).
+		Bold(true)
+
+	// Build header: "Sender • HH:MM" or "Sender • HH:MM (edited)"
+	header := fmt.Sprintf("%s • %s",
+		senderStyle.Render(senderName),
+		styles.TimestampStyle.Render(timestamp))
+
+	// Add edited indicator to header if message is edited
+	if m.Message.IsEdited {
+		header += " " + styles.EditedStyle.Render("(edited)")
 	}
 
-	return strings.Join(parts, " ")
+	return header
 }
 
 // renderContent renders the main message content.
@@ -366,14 +345,10 @@ func (m *MessageComponent) renderReply() string {
 	return styles.ReplyStyle.Render(replyText)
 }
 
-// renderFooter renders the message footer (edited, views, etc.).
+// renderFooter renders the message footer (views, pinned, etc.).
+// Note: edited indicator is now shown in the header, not footer
 func (m *MessageComponent) renderFooter() string {
 	var parts []string
-
-	// Edited indicator
-	if m.Message.IsEdited {
-		parts = append(parts, styles.EditedStyle.Render("edited"))
-	}
 
 	// Views for channel posts
 	if m.Message.Views > 0 {
@@ -418,4 +393,19 @@ func getUserColor(userID int64) lipgloss.Color {
 	// Use modulo to map user ID to a color index
 	colorIndex := int(userID % int64(len(colors)))
 	return lipgloss.Color(colors[colorIndex])
+}
+
+// indentText adds left indentation to each line of text.
+func indentText(text string, spaces int) string {
+	if text == "" {
+		return text
+	}
+	indent := strings.Repeat(" ", spaces)
+	lines := strings.Split(text, "\n")
+	for i := range lines {
+		if lines[i] != "" { // Don't indent empty lines
+			lines[i] = indent + lines[i]
+		}
+	}
+	return strings.Join(lines, "\n")
 }

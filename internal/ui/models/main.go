@@ -45,11 +45,11 @@ type MainModel struct {
 	sidebar      *SidebarModel
 	statusBar    *components.StatusBarComponent
 	filePicker   *components.FilePickerComponent
+	helpModal    *components.HelpModalComponent
 
 	// State
 	focusPane      FocusPane
 	currentChat    *types.Chat
-	showHelp       bool
 	showFilePicker bool
 	errorMessage   string
 }
@@ -87,6 +87,7 @@ func NewMainModel(config *app.Config, client *telegram.Client) *MainModel {
 		conversation: NewConversationModel(client, cache),
 		sidebar:      NewSidebarModel(cache),
 		statusBar:    components.NewStatusBarComponent(100),
+		helpModal:    components.NewHelpModalComponent(),
 	}
 }
 
@@ -107,6 +108,13 @@ func (m *MainModel) Init() tea.Cmd {
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	// Handle help modal updates when visible
+	if m.helpModal.IsVisible() {
+		var cmd tea.Cmd
+		m.helpModal, cmd = m.helpModal.Update(msg)
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Global key bindings
@@ -116,7 +124,7 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?":
 			// Only toggle help if input is not focused (so users can type "?" in messages)
 			if m.authenticated && m.conversation != nil && !m.conversation.input.Focused {
-				m.showHelp = !m.showHelp
+				m.helpModal.Show()
 				return m, nil
 			}
 		case "ctrl+s":
@@ -308,6 +316,11 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// File picker was cancelled
 		m.showFilePicker = false
 		return m, nil
+
+	case components.HelpModalDismissedMsg:
+		// Help modal was dismissed
+		m.helpModal.Hide()
+		return m, nil
 	}
 
 	// If file picker is shown, handle its updates
@@ -365,6 +378,28 @@ func (m *MainModel) View() string {
 
 // renderMainUI renders the main three-pane UI.
 func (m *MainModel) renderMainUI() string {
+	// If help modal is shown, overlay it on top
+	if m.helpModal.IsVisible() {
+		// Render help modal centered
+		helpModalView := m.helpModal.View()
+
+		// Create overlay by placing help modal on top of base content
+		contentHeight := m.height - 2 // -2 for status bar
+		overlay := lipgloss.Place(
+			m.width,
+			contentHeight,
+			lipgloss.Center,
+			lipgloss.Center,
+			helpModalView,
+			lipgloss.WithWhitespaceChars(" "),
+			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
+		)
+
+		// Combine with status bar
+		statusBarView := m.statusBar.Render()
+		return lipgloss.JoinVertical(lipgloss.Left, overlay, statusBarView)
+	}
+
 	// If file picker is shown, overlay it on top
 	if m.showFilePicker && m.filePicker != nil {
 		// Overlay file picker centered
@@ -504,6 +539,17 @@ func (m *MainModel) recalculateLayout() tea.Cmd {
 	m.conversation.SetSize(conversationWidth, contentHeight)
 	m.sidebar.SetSize(sidebarWidth, contentHeight)
 	m.statusBar.SetWidth(m.width)
+
+	// Update help modal size (80% of screen dimensions for better readability)
+	helpWidth := int(float64(m.width) * 0.8)
+	helpHeight := int(float64(m.height) * 0.8)
+	if helpWidth < 60 {
+		helpWidth = 60
+	}
+	if helpHeight < 20 {
+		helpHeight = 20
+	}
+	m.helpModal.SetSize(helpWidth, helpHeight)
 
 	return nil
 }

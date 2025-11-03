@@ -40,47 +40,45 @@ func (c *ChatItemComponent) Render() string {
 	// Build the chat item content
 	content := c.buildContent()
 
-	// Both selected and unselected have the same background
-	// Only the border changes to indicate selection
-	// c.Width is viewport width (already accounts for pane borders)
-	// lipgloss Width() sets the CONTENT width, then adds padding and border on top
-	// So we need to subtract: left padding (1) + right padding (1) + left border (1) + right border (1) = 4
-	// This ensures the total rendered width (content + padding + border) equals c.Width
-	contentWidth := c.Width - 4
+	// Ultra-compact design: maximize horizontal space usage
+	// - Selected chats get a visible border for visual emphasis
+	// - Unselected chats have an INVISIBLE border (same border style, but transparent)
+	// - This ensures ALL chats occupy exactly the same dimensions (height and width)
+	// - Borders add 2 lines of vertical height, so unselected items need the same border
+	// - This prevents visual shifting during navigation up/down
+	// - All chats use the same width calculation for maximum space efficiency
+	contentWidth := c.Width
 	if contentWidth < 1 {
 		contentWidth = 1
 	}
 
 	var itemStyle lipgloss.Style
 	if c.IsSelected && c.IsFocused {
-		// Selected AND chat list is focused: bright blue border with thick emphasis
+		// Selected AND focused: border only for emphasis (NO background)
 		itemStyle = lipgloss.NewStyle().
-			Padding(0, 1).                                          // Compact padding for more vertical space
-			Border(lipgloss.ThickBorder()).                         // Thick border for emphasis
-			BorderForeground(lipgloss.Color(styles.BorderFocused)). // Bright blue for active selection
-			Width(contentWidth)                                     // Content width: viewport width minus padding and borders
+			Border(lipgloss.RoundedBorder()).                       // Full card border
+			BorderForeground(lipgloss.Color(styles.BorderFocused)). // Bright blue border
+			Padding(0, 1).                                          // Minimal padding
+			Margin(0, 0).                                           // Equal top and bottom margins (0, 0)
+			Width(contentWidth - 4)                                 // Account for borders (2) + padding (2)
 	} else if c.IsSelected {
-		// Selected but chat list NOT focused: show selection with dimmer border
-		// This maintains visual indication of which chat is open
+		// Selected but not focused: border only with dimmer color (NO background)
 		itemStyle = lipgloss.NewStyle().
-			Padding(0, 1).
-			Border(lipgloss.RoundedBorder()).                       // Rounded border (less emphasis than thick)
-			BorderForeground(lipgloss.Color(styles.AccentCyan)).    // Cyan to indicate selection
-			Width(contentWidth)
-	} else if c.Chat.HasNewMessage {
-		// New message: highlighted border with accent color
-		itemStyle = lipgloss.NewStyle().
-			Padding(0, 1).
-			Border(lipgloss.DoubleBorder()).                        // Double border for new message emphasis
-			BorderForeground(lipgloss.Color(styles.AccentCyan)).    // Cyan accent for new messages
-			Width(contentWidth)
+			Border(lipgloss.RoundedBorder()).                    // Full card border
+			BorderForeground(lipgloss.Color(styles.AccentCyan)). // Cyan border
+			Padding(0, 1).                                       // Minimal padding
+			Margin(0, 0).                                        // Equal top and bottom margins (0, 0)
+			Width(contentWidth - 4)                              // Account for borders (2) + padding (2)
 	} else {
-		// Unselected: subtle border, transparent background, compact padding
+		// Unselected: INVISIBLE border with SAME padding as selected to maintain consistent height
+		// This is critical - the border adds vertical space even when invisible
+		// Without this, unselected items are 2 lines shorter, causing visual shifting during navigation
 		itemStyle = lipgloss.NewStyle().
-			Padding(0, 1). // Compact padding for more vertical space
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color(styles.BorderNormal)). // Subtle border
-			Width(contentWidth)                                    // Content width: viewport width minus padding and borders
+			Border(lipgloss.RoundedBorder()).                     // Same border type as selected
+			BorderForeground(lipgloss.Color(styles.ColorBlack)).  // Make border invisible (black on black)
+			Padding(0, 1).                                        // Same padding as selected (0 vertical, 1 horizontal)
+			Margin(0, 0).                                         // Equal top and bottom margins (0, 0)
+			Width(contentWidth - 4)                               // Same width calculation as selected for consistency
 	}
 
 	return itemStyle.Render(content)
@@ -93,28 +91,34 @@ func (c *ChatItemComponent) buildContent() string {
 	// Avatar (first letter of title in a circle)
 	avatar := c.buildAvatar()
 
-	// First line: title and indicators
+	// First line: title, indicators, and timestamp (compact)
 	firstLine := c.buildFirstLine()
 
 	// Combine avatar with first line
 	avatarAndTitle := lipgloss.JoinHorizontal(lipgloss.Top, avatar+" ", firstLine)
 	sb.WriteString(avatarAndTitle)
 
-	// Second line: message preview (if enabled and available)
+	// Second line: preview + metadata combined (more space-efficient)
 	if c.ShowPreview && c.Chat.LastMessage != nil {
 		sb.WriteString("\n")
-		// Add spacing for alignment with title (avatar width + 1 space)
-		spacing := "   "
 		preview := c.buildPreview()
-		sb.WriteString(spacing + preview)
-	}
+		metadata := c.buildMetadata()
 
-	// Third line: additional metadata (chat type, online status, message count)
-	metadata := c.buildMetadata()
-	if metadata != "" {
-		sb.WriteString("\n")
-		spacing := "   "
-		sb.WriteString(spacing + metadata)
+		// Combine preview and metadata on same line with separator
+		if metadata != "" {
+			secondLine := preview + " " + lipgloss.NewStyle().
+				Foreground(lipgloss.Color(styles.TextSecondary)).
+				Render("•") + " " + metadata
+			sb.WriteString("  " + secondLine) // Small indent for alignment
+		} else {
+			sb.WriteString("  " + preview)
+		}
+	} else {
+		// If no preview, show metadata on same line as title
+		metadata := c.buildMetadata()
+		if metadata != "" {
+			sb.WriteString("\n  " + metadata)
+		}
 	}
 
 	return sb.String()
@@ -159,11 +163,16 @@ func (c *ChatItemComponent) buildFirstLine() string {
 		title = fmt.Sprintf("Chat %d", c.Chat.ID)
 	}
 
-	// Title is always bright and bold, selection is shown via border
+	// Title is always bright and bold, selection is shown via card border
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(styles.TextBright)).
 		Bold(true)
-	parts = append(parts, titleStyle.Render(utils.TruncateString(title, c.Width-20)))
+	// Maximum space available: Width - avatar(2) - badges(~12) - timestamp(~8) - spacing(~3)
+	maxTitleWidth := c.Width - 25
+	if maxTitleWidth < 10 {
+		maxTitleWidth = 10 // Ensure minimum title width
+	}
+	parts = append(parts, titleStyle.Render(utils.TruncateString(title, maxTitleWidth)))
 
 	// Status indicators as badges
 	var badges []string
@@ -214,6 +223,9 @@ func (c *ChatItemComponent) buildFirstLine() string {
 	// Timestamp of last message
 	if c.Chat.LastMessage != nil {
 		timestamp := utils.FormatTimestamp(c.Chat.LastMessage.Date, true)
+		// Replace spaces with non-breaking spaces to prevent wrapping within the timestamp
+		// This ensures "34m ago" stays on one line instead of wrapping "ago" to the next line
+		timestamp = strings.ReplaceAll(timestamp, " ", "\u00A0")
 		// Timestamp color depends on whether chat list is focused AND selected
 		var timestampStyle lipgloss.Style
 		if c.IsSelected && c.IsFocused {
@@ -233,13 +245,18 @@ func (c *ChatItemComponent) buildFirstLine() string {
 	leftPart := strings.Join(parts, " ")
 	rightPart := strings.Join(rightParts, " ")
 
-	// Calculate spacing (account for avatar width + space = 3 chars)
+	// Calculate spacing - maximize horizontal space usage
 	leftLen := lipgloss.Width(leftPart)
 	rightLen := lipgloss.Width(rightPart)
-	spacingLen := c.Width - leftLen - rightLen - 12 // Account for padding, borders, avatar
 
-	if spacingLen < 1 {
-		spacingLen = 1
+	// Account for padding - now consistent for both selected and unselected
+	// Both use Width(contentWidth - 4) which accounts for borders/padding
+	paddingAdjustment := 4 // Border + padding space (or equivalent padding for unselected)
+
+	spacingLen := c.Width - leftLen - rightLen - paddingAdjustment
+	// Ensure minimum spacing of 2 to prevent timestamp from getting too close to left content
+	if spacingLen < 2 {
+		spacingLen = 2
 	}
 	spacing := strings.Repeat(" ", spacingLen)
 
@@ -300,8 +317,13 @@ func (c *ChatItemComponent) buildPreview() string {
 		preview += "[Message]"
 	}
 
-	// Truncate preview to fit width (account for avatar spacing)
-	maxLen := c.Width - 10 // Account for padding, borders, avatar
+	// Truncate preview to fit width - maximum horizontal space
+	// Reserve space for metadata if it will be on the same line (separator + status text)
+	// Since we only show status for private chats now, we can use more space
+	maxLen := c.Width - 15 // Minimal reservation for separator + status (if any)
+	if maxLen < 20 {
+		maxLen = 20 // Ensure minimum preview length
+	}
 	preview = utils.TruncateString(preview, maxLen)
 
 	// Style the preview with appropriate color
@@ -320,59 +342,38 @@ func (c *ChatItemComponent) buildPreview() string {
 	return previewStyle.Render(preview)
 }
 
-// buildMetadata builds the metadata line showing chat type, online status, etc.
+// buildMetadata builds the metadata line showing essential info (online status for private chats).
 func (c *ChatItemComponent) buildMetadata() string {
 	var parts []string
 
-	// Chat type indicator
-	var chatTypeStr string
-	switch c.Chat.Type {
-	case types.ChatTypePrivate:
-		chatTypeStr = "Private"
-		// Show detailed online status for private chats
-		if c.Chat.UserStatus == types.UserStatusOnline {
-			chatTypeStr += " • Online"
-		} else if c.Chat.UserStatus == types.UserStatusRecently {
-			chatTypeStr += " • Recently"
-		} else if c.Chat.UserStatus == types.UserStatusLastWeek {
-			chatTypeStr += " • Last week"
-		} else if c.Chat.UserStatus == types.UserStatusLastMonth {
-			chatTypeStr += " • Last month"
+	// Only show online status for private chats (no chat type label)
+	if c.Chat.Type == types.ChatTypePrivate {
+		var statusStr string
+		switch c.Chat.UserStatus {
+		case types.UserStatusOnline:
+			statusStr = "Online"
+		case types.UserStatusRecently:
+			statusStr = "Recently"
+		case types.UserStatusLastWeek:
+			statusStr = "Last week"
+		case types.UserStatusLastMonth:
+			statusStr = "Last month"
 		}
-	case types.ChatTypeGroup:
-		chatTypeStr = "Group"
-	case types.ChatTypeSupergroup:
-		chatTypeStr = "Supergroup"
-	case types.ChatTypeChannel:
-		chatTypeStr = "Channel"
-	}
 
-	if chatTypeStr != "" {
-		var typeStyle lipgloss.Style
-		// Only brighten if chat list is focused AND selected
-		if c.IsSelected && c.IsFocused {
-			typeStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(styles.AccentBlue)).
-				Bold(false)
-		} else {
-			typeStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color(styles.TextSecondary)).
-				Bold(false)
+		if statusStr != "" {
+			var statusStyle lipgloss.Style
+			// Only brighten if chat list is focused AND selected
+			if c.IsSelected && c.IsFocused {
+				statusStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(styles.AccentBlue)).
+					Bold(false)
+			} else {
+				statusStyle = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(styles.TextSecondary)).
+					Bold(false)
+			}
+			parts = append(parts, statusStyle.Render(statusStr))
 		}
-		parts = append(parts, typeStyle.Render(chatTypeStr))
-	}
-
-	// Message count if available (total messages in chat)
-	if c.Chat.LastMessage != nil && c.Chat.LastMessage.ID > 0 {
-		msgCountStr := fmt.Sprintf("%d messages", c.Chat.LastMessage.ID)
-		var msgStyle lipgloss.Style
-		// Only brighten if chat list is focused AND selected
-		if c.IsSelected && c.IsFocused {
-			msgStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.AccentBlue))
-		} else {
-			msgStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.TextSecondary))
-		}
-		parts = append(parts, msgStyle.Render(msgCountStr))
 	}
 
 	if len(parts) == 0 {
