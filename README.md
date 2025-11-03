@@ -264,22 +264,25 @@ ithil -help
 
 | Key | Action |
 |-----|--------|
-| `j`, `↓` | Scroll down one line |
-| `k`, `↑` | Scroll up one line |
-| `Ctrl+U` | Scroll up half page (fast navigation) |
-| `Ctrl+D` | Scroll down half page (fast navigation) |
+| `j`, `↓` | Select next message (moves ▶ cursor) |
+| `k`, `↑` | Select previous message (moves ▶ cursor) |
+| `Ctrl+U` | Scroll up half page |
+| `Ctrl+D` | Scroll down half page |
 | `Ctrl+B`, `PgUp` | Scroll up full page |
 | `Ctrl+F`, `PgDn` | Scroll down full page |
 | `g`, `Home` | Go to top |
 | `G`, `End` | Go to bottom |
 | `i`, `a` | Focus input field |
+| `Enter` | View media for selected message |
 
 #### Message Actions
 
+**Note:** All actions apply to the selected message (marked with ▶ cursor)
+
 | Key | Action |
 |-----|--------|
-| `r` | Reply to message |
-| `e` | Edit message |
+| `r` | Reply to selected message |
+| `e` | Edit selected message (if outgoing) |
 | `d` | Delete message |
 | `f` | Forward message |
 | `y` | Copy message |

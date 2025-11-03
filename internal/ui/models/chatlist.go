@@ -144,13 +144,46 @@ func (m *ChatListModel) Update(msg tea.Msg) (*ChatListModel, tea.Cmd) {
 		return m, nil
 
 	case chatsUpdatedMsg:
+		// Remember which chat was selected (if any)
+		var selectedChatID int64 = -1
+		if m.selectedIndex >= 0 && m.selectedIndex < len(m.chats) {
+			selectedChatID = m.chats[m.selectedIndex].ID
+		}
+
+		// Update the chat list
 		m.chats = msg.chats
+
+		// CRITICAL FIX: Sort chats by recency after updating
+		// Cache returns chats in random order (Go map iteration), so we must sort
+		// This ensures recently messaged chats appear at the top
+		m.sortChats()
+
+		// Find the new position of the selected chat
+		if selectedChatID != -1 {
+			found := false
+			for i, chat := range m.chats {
+				if chat.ID == selectedChatID {
+					m.selectedIndex = i
+					found = true
+					break
+				}
+			}
+			// If the chat was not found (e.g., deleted), keep current index but bounds-check it
+			if !found {
+				if m.selectedIndex >= len(m.chats) {
+					m.selectedIndex = len(m.chats) - 1
+				}
+			}
+		}
+
+		// Bounds checking (in case chat was removed or list is empty)
 		if m.selectedIndex >= len(m.chats) {
 			m.selectedIndex = len(m.chats) - 1
 		}
 		if m.selectedIndex < 0 && len(m.chats) > 0 {
 			m.selectedIndex = 0
 		}
+
 		m.updateViewport()
 		return m, nil
 	}
@@ -497,19 +530,23 @@ func (m *ChatListModel) AddChat(chat *types.Chat) {
 }
 
 // sortChats sorts chats by last message date (most recent first).
+// Pinned chats maintain their position at the top using PinOrder.
 func (m *ChatListModel) sortChats() {
-	sort.Slice(m.chats, func(i, j int) bool {
+	sort.SliceStable(m.chats, func(i, j int) bool {
 		// Pinned chats always on top
 		if m.chats[i].IsPinned != m.chats[j].IsPinned {
 			return m.chats[i].IsPinned
 		}
 
-		// Then chats with new messages (HasNewMessage flag)
-		if m.chats[i].HasNewMessage != m.chats[j].HasNewMessage {
-			return m.chats[i].HasNewMessage
+		// CRITICAL: If both are pinned, sort by PinOrder (lower number = higher priority)
+		// PinOrder is assigned when chats are loaded from Telegram API and preserves
+		// the exact order that chats were pinned in
+		if m.chats[i].IsPinned && m.chats[j].IsPinned {
+			return m.chats[i].PinOrder < m.chats[j].PinOrder
 		}
 
-		// Then by last message date
+		// For unpinned chats: sort by last message date (most recent first)
+		// This ensures chats with recent activity (sent OR received) appear at top
 		if m.chats[i].LastMessage == nil {
 			return false
 		}

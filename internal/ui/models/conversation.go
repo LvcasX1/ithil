@@ -35,6 +35,7 @@ type ConversationModel struct {
 	typingUsers    map[int64]time.Time              // userID -> when they started typing
 	mediaViewer    *components.MediaViewerComponent // Media viewer modal
 	selectedMsgIdx int                              // Index of selected message for navigation and media viewing
+	messageLinesMap map[int]int                     // Maps message index to starting line position
 }
 
 // NewConversationModel creates a new conversation model.
@@ -43,14 +44,15 @@ func NewConversationModel(client *telegram.Client, cache *cache.Cache) *Conversa
 	vp.MouseWheelEnabled = false
 
 	return &ConversationModel{
-		client:         client,
-		cache:          cache,
-		messages:       []*types.Message{},
-		viewport:       vp,
-		input:          components.NewInputComponent(100, 5),
-		typingUsers:    make(map[int64]time.Time),
-		mediaViewer:    components.NewMediaViewerComponent(80, 30),
-		selectedMsgIdx: -1,
+		client:          client,
+		cache:           cache,
+		messages:        []*types.Message{},
+		viewport:        vp,
+		input:           components.NewInputComponent(100, 5),
+		typingUsers:     make(map[int64]time.Time),
+		mediaViewer:     components.NewMediaViewerComponent(80, 30),
+		selectedMsgIdx:  -1,
+		messageLinesMap: make(map[int]int),
 	}
 }
 
@@ -87,18 +89,18 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 		// Otherwise handle navigation keys only when pane is focused
 		if m.focused && !m.input.Focused && !m.mediaViewer.IsVisible() {
 			switch msg.String() {
-			case "up", "k":
-				m.viewport.LineUp(1)
-				return m, nil
-			case "down", "j":
-				m.viewport.LineDown(1)
-				return m, nil
-			case "ctrl+p", "shift+up":
-				// Select previous message
-				return m, m.selectPreviousMessage()
-			case "ctrl+n", "shift+down":
-				// Select next message
-				return m, m.selectNextMessage()
+			case "up":
+				// Select previous message (single step for precision)
+				return m, m.selectPreviousMessage(1)
+			case "down":
+				// Select next message (single step for precision)
+				return m, m.selectNextMessage(1)
+			case "k":
+				// Fast navigation - skip 3 messages up
+				return m, m.selectPreviousMessage(3)
+			case "j":
+				// Fast navigation - skip 3 messages down
+				return m, m.selectNextMessage(3)
 			case "ctrl+u":
 				// Scroll up half page (faster navigation)
 				m.viewport.HalfViewUp()
@@ -456,7 +458,12 @@ func (m *ConversationModel) renderAllMessages() string {
 	// Get current user ID
 	currentUserID := m.client.GetCurrentUserID()
 
+	// Reset the message lines map
+	m.messageLinesMap = make(map[int]int)
+
 	var messageViews []string
+	currentLine := 0
+
 	for i, message := range m.messages {
 		// Get sender name from cache for incoming messages
 		senderName := ""
@@ -477,9 +484,22 @@ func (m *ConversationModel) renderAllMessages() string {
 		// Check if this message is selected
 		isSelected := i == m.selectedMsgIdx
 
+		// Store the starting line for this message
+		m.messageLinesMap[i] = currentLine
+
 		// Use viewport width for message rendering so messages use full available space
 		messageComponent := components.NewMessageComponentWithSelection(message, m.viewport.Width, currentUserID, senderName, isSelected)
-		messageViews = append(messageViews, messageComponent.Render())
+		renderedMessage := messageComponent.Render()
+		messageViews = append(messageViews, renderedMessage)
+
+		// Count the lines in the rendered message
+		messageLineCount := strings.Count(renderedMessage, "\n") + 1
+		currentLine += messageLineCount
+
+		// Add 2 lines for the spacing between messages ("\n\n")
+		if i < len(m.messages)-1 {
+			currentLine += 2
+		}
 	}
 
 	return strings.Join(messageViews, "\n\n")
@@ -882,77 +902,118 @@ func (m *ConversationModel) downloadMediaForViewer(message *types.Message) tea.C
 }
 
 // selectPreviousMessage selects the previous message in the conversation.
-func (m *ConversationModel) selectPreviousMessage() tea.Cmd {
+// The step parameter controls how many messages to skip (e.g., 1 for single step, 3 for fast navigation).
+func (m *ConversationModel) selectPreviousMessage(step int) tea.Cmd {
 	if len(m.messages) == 0 {
 		return nil
 	}
+
+	oldIdx := m.selectedMsgIdx
 
 	// If no selection, start at last message
 	if m.selectedMsgIdx < 0 {
 		m.selectedMsgIdx = len(m.messages) - 1
-	} else if m.selectedMsgIdx > 0 {
-		m.selectedMsgIdx--
 	} else {
-		// Wrap around to last message
-		m.selectedMsgIdx = len(m.messages) - 1
+		// Move up by 'step' messages
+		m.selectedMsgIdx -= step
+
+		// Handle wrapping
+		if m.selectedMsgIdx < 0 {
+			m.selectedMsgIdx = 0
+		}
 	}
 
-	m.updateViewport()
-	m.scrollToSelectedMessage()
+	// Only re-render if selection actually changed
+	if oldIdx != m.selectedMsgIdx {
+		m.updateViewport()
+		m.scrollToSelectedMessage()
+	}
 	return nil
 }
 
 // selectNextMessage selects the next message in the conversation.
-func (m *ConversationModel) selectNextMessage() tea.Cmd {
+// The step parameter controls how many messages to skip (e.g., 1 for single step, 3 for fast navigation).
+func (m *ConversationModel) selectNextMessage(step int) tea.Cmd {
 	if len(m.messages) == 0 {
 		return nil
 	}
 
+	oldIdx := m.selectedMsgIdx
+
 	// If no selection, start at first message
 	if m.selectedMsgIdx < 0 {
 		m.selectedMsgIdx = 0
-	} else if m.selectedMsgIdx < len(m.messages)-1 {
-		m.selectedMsgIdx++
 	} else {
-		// Wrap around to first message
-		m.selectedMsgIdx = 0
+		// Move down by 'step' messages
+		m.selectedMsgIdx += step
+
+		// Handle wrapping
+		if m.selectedMsgIdx >= len(m.messages) {
+			m.selectedMsgIdx = len(m.messages) - 1
+		}
 	}
 
-	m.updateViewport()
-	m.scrollToSelectedMessage()
+	// Only re-render if selection actually changed
+	if oldIdx != m.selectedMsgIdx {
+		m.updateViewport()
+		m.scrollToSelectedMessage()
+	}
 	return nil
 }
 
-// scrollToSelectedMessage scrolls the viewport to ensure the selected message is visible.
+// scrollToSelectedMessage scrolls the viewport to keep the selected message centered.
+// Uses actual rendered line positions from messageLinesMap for accurate scrolling.
+// Keeps the selected message in the middle of the viewport for best visibility.
 func (m *ConversationModel) scrollToSelectedMessage() {
 	if m.selectedMsgIdx < 0 || m.selectedMsgIdx >= len(m.messages) {
 		return
 	}
 
-	// Calculate approximate line position of selected message
-	// Each message takes roughly 5-8 lines (header + content + spacing)
-	// This is a simplified calculation - for exact positioning we'd need to track
-	// the actual rendered line positions
-	estimatedLinesPerMessage := 6
-	estimatedLinePos := m.selectedMsgIdx * estimatedLinesPerMessage
-
-	// Get viewport boundaries
-	viewportTop := m.viewport.YOffset
-	viewportBottom := viewportTop + m.viewport.Height
-
-	// Check if selected message is outside viewport
-	if estimatedLinePos < viewportTop {
-		// Message is above viewport - scroll up
-		m.viewport.SetYOffset(estimatedLinePos)
-	} else if estimatedLinePos > viewportBottom-5 {
-		// Message is below viewport - scroll down
-		// Leave some padding (5 lines) to keep context visible
-		newOffset := estimatedLinePos - m.viewport.Height + 5
-		if newOffset < 0 {
-			newOffset = 0
+	// Get the actual starting line position of the selected message
+	messageStartLine, exists := m.messageLinesMap[m.selectedMsgIdx]
+	if !exists {
+		// Fallback: rebuild viewport if message position not found
+		m.updateViewport()
+		messageStartLine, exists = m.messageLinesMap[m.selectedMsgIdx]
+		if !exists {
+			return
 		}
-		m.viewport.SetYOffset(newOffset)
 	}
+
+	// Strategy: Keep the selected message centered in the viewport
+	// This makes it always visible and easy to see what's selected
+
+	// Calculate where the message should be positioned (centered)
+	targetOffset := messageStartLine - (m.viewport.Height / 2)
+
+	// Don't scroll past the beginning
+	if targetOffset < 0 {
+		targetOffset = 0
+	}
+
+	// Get total content height
+	totalLines := 0
+	if len(m.messageLinesMap) > 0 {
+		// Find the last message's position
+		lastMsgIdx := len(m.messages) - 1
+		if lastPos, hasLast := m.messageLinesMap[lastMsgIdx]; hasLast {
+			// Estimate total height (last message start + some buffer for the message itself)
+			totalLines = lastPos + 15 // Add buffer for last message height
+		}
+	}
+
+	// Don't scroll past the end (if content is shorter than viewport, stay at top)
+	maxOffset := totalLines - m.viewport.Height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+
+	if targetOffset > maxOffset {
+		targetOffset = maxOffset
+	}
+
+	// Apply the new offset
+	m.viewport.SetYOffset(targetOffset)
 }
 
 // Messages for conversation updates.
