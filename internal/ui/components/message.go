@@ -168,6 +168,9 @@ func (m *MessageComponent) renderContent() string {
 	case types.MessageTypeVoice:
 		return m.renderMediaContent("Voice Message", "", nil)
 
+	case types.MessageTypeVideoNote:
+		return m.renderMediaContent("Video Message", "", nil)
+
 	case types.MessageTypeAudio:
 		return m.renderMediaContent("Audio", content.Caption, content.Entities)
 

@@ -12,14 +12,21 @@ import (
 
 // AudioRenderer handles rendering audio metadata and waveforms in the terminal.
 type AudioRenderer struct {
-	maxWidth int
+	maxWidth    int
+	audioPlayer *AudioPlayer
 }
 
 // NewAudioRenderer creates a new audio renderer.
 func NewAudioRenderer(maxWidth int) *AudioRenderer {
 	return &AudioRenderer{
-		maxWidth: maxWidth,
+		maxWidth:    maxWidth,
+		audioPlayer: NewAudioPlayer(),
 	}
+}
+
+// GetAudioPlayer returns the audio player instance.
+func (r *AudioRenderer) GetAudioPlayer() *AudioPlayer {
+	return r.audioPlayer
 }
 
 // RenderAudioPreview renders a preview of an audio file with metadata.
@@ -94,14 +101,138 @@ func (r *AudioRenderer) RenderVoicePreview(filePath string, media *types.Media) 
 	return sb.String(), nil
 }
 
+// RenderFullVoiceView renders a full voice message view for the modal.
+func (r *AudioRenderer) RenderFullVoiceView(filePath string, media *types.Media) (string, error) {
+	var sb strings.Builder
+
+	// Get current playback state
+	currentTime := int(r.audioPlayer.GetPosition().Seconds())
+	state := r.audioPlayer.GetState()
+	volume := r.audioPlayer.GetVolume()
+
+	// Header with visual appeal
+	sb.WriteString("🎤 ════════════════════════════════════════\n")
+	sb.WriteString("        VOICE MESSAGE\n")
+	sb.WriteString("════════════════════════════════════════\n\n")
+
+	// Playback state indicator
+	stateIcon := "⏸"
+	stateText := "Stopped"
+	switch state {
+	case StatePlaying:
+		stateIcon = "▶"
+		stateText = "Playing"
+	case StatePaused:
+		stateIcon = "⏸"
+		stateText = "Paused"
+	case StateStopped:
+		stateIcon = "⏹"
+		stateText = "Stopped"
+	}
+	sb.WriteString(fmt.Sprintf("  %s  %s", stateIcon, stateText))
+
+	// Volume indicator
+	volumePercent := int((volume + 5) * 10) // Convert -5 to 5 range to 0-100%
+	sb.WriteString(fmt.Sprintf("    🔊 Volume: %d%%\n\n", volumePercent))
+
+	// Duration - most important for voice messages
+	if media != nil && media.Duration > 0 {
+		duration := formatDuration(media.Duration)
+		sb.WriteString(fmt.Sprintf("⏱  Duration: %s\n", duration))
+	}
+
+	// File info section (less prominent than audio files)
+	if media != nil {
+		if media.Size > 0 {
+			size := formatFileSize(media.Size)
+			sb.WriteString(fmt.Sprintf("💾 Size: %s\n", size))
+		}
+		if media.MimeType != "" {
+			sb.WriteString(fmt.Sprintf("🔧 Format: %s\n", media.MimeType))
+		}
+	}
+
+	// Waveform visualization section
+	sb.WriteString("\n")
+	sb.WriteString("┌" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┐\n")
+	sb.WriteString("│ WAVEFORM" + strings.Repeat(" ", min(r.maxWidth-11, 51)) + "│\n")
+	sb.WriteString("├" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┤\n")
+
+	// Render multiple lines of waveform for detail
+	waveformLines := r.renderLargeWaveform()
+	for _, line := range strings.Split(waveformLines, "\n") {
+		sb.WriteString("│ " + line)
+		// Pad to box width
+		padding := min(r.maxWidth-4, 60) - len(line)
+		if padding > 0 {
+			sb.WriteString(strings.Repeat(" ", padding))
+		}
+		sb.WriteString("│\n")
+	}
+
+	sb.WriteString("└" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┘\n")
+
+	// Progress bar with actual playback position
+	sb.WriteString("\n")
+	sb.WriteString(r.renderProgressBar(currentTime, media))
+	sb.WriteString("\n")
+
+	// File path (less prominent)
+	sb.WriteString("\n")
+	fileName := filepath.Base(filePath)
+	sb.WriteString(fmt.Sprintf("📄 %s\n", truncateString(fileName, r.maxWidth-8)))
+
+	// Controls section
+	sb.WriteString("\n")
+	sb.WriteString("┌" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┐\n")
+	sb.WriteString("│ PLAYBACK CONTROLS" + strings.Repeat(" ", min(r.maxWidth-20, 42)) + "│\n")
+	sb.WriteString("├" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┤\n")
+	sb.WriteString("│                                                           │\n")
+	sb.WriteString("│   ⏯  Space      Play/Pause                                │\n")
+	sb.WriteString("│   ⏮  ←          Skip Back 5s                              │\n")
+	sb.WriteString("│   ⏭  →          Skip Forward 5s                           │\n")
+	sb.WriteString("│   🔊  ↑          Volume Up                                 │\n")
+	sb.WriteString("│   🔉  ↓          Volume Down                               │\n")
+	sb.WriteString("│   ⏹  Q/ESC      Stop & Close                               │\n")
+	sb.WriteString("│                                                           │\n")
+	sb.WriteString("└" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┘\n")
+
+	return sb.String(), nil
+}
+
 // RenderFullAudioView renders a full audio view for the modal.
 func (r *AudioRenderer) RenderFullAudioView(filePath string, media *types.Media) (string, error) {
 	var sb strings.Builder
+
+	// Get current playback state
+	currentTime := int(r.audioPlayer.GetPosition().Seconds())
+	state := r.audioPlayer.GetState()
+	volume := r.audioPlayer.GetVolume()
 
 	// Header with visual appeal
 	sb.WriteString("🎵 ════════════════════════════════════════\n")
 	sb.WriteString("          AUDIO PLAYER\n")
 	sb.WriteString("════════════════════════════════════════\n\n")
+
+	// Playback state indicator
+	stateIcon := "⏸"
+	stateText := "Stopped"
+	switch state {
+	case StatePlaying:
+		stateIcon = "▶"
+		stateText = "Playing"
+	case StatePaused:
+		stateIcon = "⏸"
+		stateText = "Paused"
+	case StateStopped:
+		stateIcon = "⏹"
+		stateText = "Stopped"
+	}
+	sb.WriteString(fmt.Sprintf("  %s  %s", stateIcon, stateText))
+
+	// Volume indicator
+	volumePercent := int((volume + 5) * 10) // Convert -5 to 5 range to 0-100%
+	sb.WriteString(fmt.Sprintf("    🔊 Volume: %d%%\n\n", volumePercent))
 
 	// File info section
 	fileName := filepath.Base(filePath)
@@ -129,9 +260,6 @@ func (r *AudioRenderer) RenderFullAudioView(filePath string, media *types.Media)
 		}
 	}
 
-	// File path
-	sb.WriteString(fmt.Sprintf("\n📁 Path: %s\n", filePath))
-
 	// Waveform visualization section
 	sb.WriteString("\n")
 	sb.WriteString("┌" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┐\n")
@@ -152,9 +280,9 @@ func (r *AudioRenderer) RenderFullAudioView(filePath string, media *types.Media)
 
 	sb.WriteString("└" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┘\n")
 
-	// Progress bar
+	// Progress bar with actual playback position
 	sb.WriteString("\n")
-	sb.WriteString(r.renderProgressBar(0, media))
+	sb.WriteString(r.renderProgressBar(currentTime, media))
 	sb.WriteString("\n")
 
 	// Playback controls section
@@ -168,26 +296,9 @@ func (r *AudioRenderer) RenderFullAudioView(filePath string, media *types.Media)
 	sb.WriteString("│   ⏭  →          Skip Forward 5s                           │\n")
 	sb.WriteString("│   🔊  ↑          Volume Up                                 │\n")
 	sb.WriteString("│   🔉  ↓          Volume Down                               │\n")
-	sb.WriteString("│   ⏹  Q          Stop & Close                               │\n")
+	sb.WriteString("│   ⏹  Q/ESC      Stop & Close                               │\n")
 	sb.WriteString("│                                                           │\n")
 	sb.WriteString("└" + strings.Repeat("─", min(r.maxWidth-2, 60)) + "┘\n")
-
-	// External player instructions
-	sb.WriteString("\n")
-	sb.WriteString("╔" + strings.Repeat("═", min(r.maxWidth-2, 60)) + "╗\n")
-	sb.WriteString("║ ⚠  NOTE: Terminal audio playback not yet supported       ║\n")
-	sb.WriteString("╠" + strings.Repeat("═", min(r.maxWidth-2, 60)) + "╣\n")
-	sb.WriteString("║                                                           ║\n")
-	sb.WriteString("║ To listen to this audio file, use:                       ║\n")
-	sb.WriteString("║                                                           ║\n")
-	sb.WriteString("║   • macOS:    open \"<path>\"                             ║\n")
-	sb.WriteString("║   • Linux:    xdg-open \"<path>\" or mpv \"<path>\"      ║\n")
-	sb.WriteString("║   • Windows:  start \"<path>\"                           ║\n")
-	sb.WriteString("║                                                           ║\n")
-	sb.WriteString("║ Or copy the path above and open with your preferred      ║\n")
-	sb.WriteString("║ audio player application.                                ║\n")
-	sb.WriteString("║                                                           ║\n")
-	sb.WriteString("╚" + strings.Repeat("═", min(r.maxWidth-2, 60)) + "╝\n")
 
 	return sb.String(), nil
 }

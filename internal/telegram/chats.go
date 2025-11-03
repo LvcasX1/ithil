@@ -93,6 +93,9 @@ func (c *Client) convertDialogs(dialogs []tg.DialogClass, chats []tg.ChatClass, 
 		}
 	}
 
+	// Track pin order - Telegram returns pinned chats in their correct order
+	pinOrderCounter := 1
+
 	// Process each dialog
 	for _, dialog := range dialogs {
 		d, ok := dialog.(*tg.Dialog)
@@ -103,7 +106,14 @@ func (c *Client) convertDialogs(dialogs []tg.DialogClass, chats []tg.ChatClass, 
 		chat := &types.Chat{
 			UnreadCount: d.UnreadCount,
 			IsPinned:    d.Pinned,
+			PinOrder:    0, // Will be set below if pinned
 			IsMuted:     false, // Will be set based on notify settings
+		}
+
+		// Assign pin order to pinned chats (maintains Telegram's original order)
+		if d.Pinned {
+			chat.PinOrder = pinOrderCounter
+			pinOrderCounter++
 		}
 
 		// Get peer information
@@ -186,33 +196,110 @@ func (c *Client) SearchChats(query string, limit int) ([]*types.Chat, error) {
 	return []*types.Chat{}, nil
 }
 
-// PinChat pins a chat.
-func (c *Client) PinChat(chatID int64, pin bool) error {
-	c.logger.Info("Pinning chat", "chatID", chatID, "pin", pin)
+// PinChat pins or unpins a chat.
+func (c *Client) PinChat(chat *types.Chat, pin bool) error {
+	c.logger.Info("Pinning chat", "chatID", chat.ID, "pin", pin)
 
-	// TODO: Implement with gotd API
-	// Use c.api.MessagesToggleDialogPin() with appropriate parameters
+	// Convert chat to InputPeer
+	inputPeer, err := c.chatToInputPeer(chat)
+	if err != nil {
+		c.logger.Error("Failed to convert chat to InputPeer", "error", err)
+		return fmt.Errorf("failed to convert chat to InputPeer: %w", err)
+	}
 
+	// Create InputDialogPeer
+	dialogPeer := &tg.InputDialogPeer{
+		Peer: inputPeer,
+	}
+
+	// Toggle dialog pin
+	_, err = c.api.MessagesToggleDialogPin(c.ctx, &tg.MessagesToggleDialogPinRequest{
+		Pinned: pin,
+		Peer:   dialogPeer,
+	})
+
+	if err != nil {
+		c.logger.Error("Failed to toggle dialog pin", "error", err)
+		return fmt.Errorf("failed to toggle dialog pin: %w", err)
+	}
+
+	c.logger.Info("Successfully toggled dialog pin", "chatID", chat.ID, "pinned", pin)
 	return nil
 }
 
 // MuteChat mutes or unmutes a chat.
-func (c *Client) MuteChat(chatID int64, mute bool) error {
-	c.logger.Info("Muting chat", "chatID", chatID, "mute", mute)
+func (c *Client) MuteChat(chat *types.Chat, mute bool) error {
+	c.logger.Info("Muting chat", "chatID", chat.ID, "mute", mute)
 
-	// TODO: Implement with gotd API
-	// Use c.api.AccountUpdateNotifySettings() with appropriate parameters
+	// Convert chat to InputPeer
+	inputPeer, err := c.chatToInputPeer(chat)
+	if err != nil {
+		c.logger.Error("Failed to convert chat to InputPeer", "error", err)
+		return fmt.Errorf("failed to convert chat to InputPeer: %w", err)
+	}
 
+	// Create InputNotifyPeer
+	notifyPeer := &tg.InputNotifyPeer{
+		Peer: inputPeer,
+	}
+
+	// Create notification settings
+	settings := tg.InputPeerNotifySettings{}
+	if mute {
+		// Mute indefinitely by setting MuteUntil to max int32 value
+		settings.SetMuteUntil(2147483647) // Unix timestamp far in the future
+	} else {
+		// Unmute by setting MuteUntil to 0
+		settings.SetMuteUntil(0)
+	}
+
+	// Update notification settings
+	_, err = c.api.AccountUpdateNotifySettings(c.ctx, &tg.AccountUpdateNotifySettingsRequest{
+		Peer:     notifyPeer,
+		Settings: settings,
+	})
+
+	if err != nil {
+		c.logger.Error("Failed to update notification settings", "error", err)
+		return fmt.Errorf("failed to update notification settings: %w", err)
+	}
+
+	c.logger.Info("Successfully updated notification settings", "chatID", chat.ID, "muted", mute)
 	return nil
 }
 
 // ArchiveChat archives or unarchives a chat.
-func (c *Client) ArchiveChat(chatID int64, archive bool) error {
-	c.logger.Info("Archiving chat", "chatID", chatID, "archive", archive)
+func (c *Client) ArchiveChat(chat *types.Chat, archive bool) error {
+	c.logger.Info("Archiving chat", "chatID", chat.ID, "archive", archive)
 
-	// TODO: Implement with gotd API
-	// Use c.api.FoldersEditPeerFolders() with appropriate parameters
+	// Convert chat to InputPeer
+	inputPeer, err := c.chatToInputPeer(chat)
+	if err != nil {
+		c.logger.Error("Failed to convert chat to InputPeer", "error", err)
+		return fmt.Errorf("failed to convert chat to InputPeer: %w", err)
+	}
 
+	// Create InputFolderPeer
+	// Folder ID 1 is the archive folder, 0 means no folder (unarchive)
+	folderID := 0
+	if archive {
+		folderID = 1
+	}
+
+	folderPeer := tg.InputFolderPeer{
+		Peer:     inputPeer,
+		FolderID: folderID,
+	}
+
+	// Edit peer folders
+	_, err = c.api.FoldersEditPeerFolders(c.ctx, []tg.InputFolderPeer{folderPeer})
+
+	if err != nil {
+		c.logger.Error("Failed to edit peer folders", "error", err)
+		return fmt.Errorf("failed to edit peer folders: %w", err)
+	}
+
+	c.logger.Info("Successfully edited peer folders", "chatID", chat.ID, "archived", archive)
 	return nil
 }
 

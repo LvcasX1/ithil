@@ -250,7 +250,14 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			chat.LastMessage = msg.message
 			m.cache.SetChat(chat)
 		}
-		return m, nil
+
+		// CRITICAL FIX: Trigger chat list update so selection tracking works
+		// Get all chats and send chatsUpdatedMsg to refresh the chat list
+		// This ensures the chat list reorders and selection follows the chat
+		allChats := m.cache.GetChats()
+		return m, func() tea.Msg {
+			return chatsUpdatedMsg{chats: allChats}
+		}
 
 	case messageEditedMsg:
 		// Update the message in conversation

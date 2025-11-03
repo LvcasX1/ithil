@@ -12,12 +12,12 @@ import (
 
 // HelpModalComponent represents a scrollable help modal.
 type HelpModalComponent struct {
-	viewport    viewport.Model
-	width       int
-	height      int
-	visible     bool
-	content     string
-	ready       bool
+	viewport viewport.Model
+	width    int
+	height   int
+	visible  bool
+	content  string
+	ready    bool
 }
 
 // NewHelpModalComponent creates a new help modal component.
@@ -131,7 +131,7 @@ func (h *HelpModalComponent) View() string {
 						strings.Repeat("█", scrollPercentage/5),
 						strings.Repeat("░", 20-scrollPercentage/5),
 					),
-				), " ", lipgloss.NewStyle().Render(lipgloss.JoinHorizontal(lipgloss.Left, string(rune(scrollPercentage/10 + '0')), string(rune((scrollPercentage%10) + '0')), "%"))),
+				), " ", lipgloss.NewStyle().Render(lipgloss.JoinHorizontal(lipgloss.Left, string(rune(scrollPercentage/10+'0')), string(rune((scrollPercentage%10)+'0')), "%"))),
 			),
 		),
 	)

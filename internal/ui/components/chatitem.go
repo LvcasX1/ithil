@@ -74,11 +74,11 @@ func (c *ChatItemComponent) Render() string {
 		// This is critical - the border adds vertical space even when invisible
 		// Without this, unselected items are 2 lines shorter, causing visual shifting during navigation
 		itemStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).                     // Same border type as selected
-			BorderForeground(lipgloss.Color(styles.ColorBlack)).  // Make border invisible (black on black)
-			Padding(0, 1).                                        // Same padding as selected (0 vertical, 1 horizontal)
-			Margin(0, 0).                                         // Equal top and bottom margins (0, 0)
-			Width(contentWidth - 4)                               // Same width calculation as selected for consistency
+			Border(lipgloss.RoundedBorder()).                    // Same border type as selected
+			BorderForeground(lipgloss.Color(styles.ColorBlack)). // Make border invisible (black on black)
+			Padding(0, 1).                                       // Same padding as selected (0 vertical, 1 horizontal)
+			Margin(0, 0).                                        // Equal top and bottom margins (0, 0)
+			Width(contentWidth - 4)                              // Same width calculation as selected for consistency
 	}
 
 	return itemStyle.Render(content)
@@ -88,15 +88,11 @@ func (c *ChatItemComponent) Render() string {
 func (c *ChatItemComponent) buildContent() string {
 	var sb strings.Builder
 
-	// Avatar (first letter of title in a circle)
-	avatar := c.buildAvatar()
-
 	// First line: title, indicators, and timestamp (compact)
 	firstLine := c.buildFirstLine()
 
-	// Combine avatar with first line
-	avatarAndTitle := lipgloss.JoinHorizontal(lipgloss.Top, avatar+" ", firstLine)
-	sb.WriteString(avatarAndTitle)
+	// Write first line directly (avatar removed)
+	sb.WriteString(firstLine)
 
 	// Second line: preview + metadata combined (more space-efficient)
 	if c.ShowPreview && c.Chat.LastMessage != nil {
@@ -167,8 +163,9 @@ func (c *ChatItemComponent) buildFirstLine() string {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(styles.TextBright)).
 		Bold(true)
-	// Maximum space available: Width - avatar(2) - badges(~12) - timestamp(~8) - spacing(~3)
-	maxTitleWidth := c.Width - 25
+	// Maximum space available: Width - badges(~12) - timestamp(~8) - spacing(~3)
+	// Avatar removed, so we gain ~2 characters of space
+	maxTitleWidth := c.Width - 23
 	if maxTitleWidth < 10 {
 		maxTitleWidth = 10 // Ensure minimum title width
 	}
@@ -347,11 +344,13 @@ func (c *ChatItemComponent) buildMetadata() string {
 	var parts []string
 
 	// Only show online status for private chats (no chat type label)
+	// Note: Green dot indicator is shown in buildFirstLine(), so we don't need to show "Online" text
 	if c.Chat.Type == types.ChatTypePrivate {
 		var statusStr string
 		switch c.Chat.UserStatus {
 		case types.UserStatusOnline:
-			statusStr = "Online"
+			// Skip showing "Online" text - green dot already indicates this
+			statusStr = ""
 		case types.UserStatusRecently:
 			statusStr = "Recently"
 		case types.UserStatusLastWeek:

@@ -55,6 +55,7 @@ type Chat struct {
 	LastMessage          *Message
 	UnreadCount          int
 	IsPinned             bool
+	PinOrder             int  // Order of pinned chats (lower = higher priority, 0 = not pinned)
 	IsMuted              bool
 	DraftMessage         string
 	LastReadInboxID      int64
