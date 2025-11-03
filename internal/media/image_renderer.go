@@ -32,6 +32,11 @@ func NewImageRenderer(maxWidth, maxHeight int, colored bool) *ImageRenderer {
 
 // RenderImageFile renders an image file to ASCII/ANSI art.
 func (r *ImageRenderer) RenderImageFile(filePath string) (string, error) {
+	// Check if file exists
+	if _, err := os.Stat(filePath); err != nil {
+		return "", fmt.Errorf("unable to open file, no such file or directory: %w", err)
+	}
+
 	// Create flags for the ascii-image-converter
 	flags := aic_package.DefaultFlags()
 

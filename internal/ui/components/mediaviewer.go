@@ -3,6 +3,7 @@ package components
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,6 +22,7 @@ type MediaViewerComponent struct {
 	visible        bool
 	content        string
 	imageRenderer  *media.ImageRenderer
+	mosaicRenderer *media.MosaicRenderer
 	audioRenderer  *media.AudioRenderer
 	renderError    error
 	downloading    bool
@@ -30,11 +32,12 @@ type MediaViewerComponent struct {
 // NewMediaViewerComponent creates a new media viewer component.
 func NewMediaViewerComponent(width, height int) *MediaViewerComponent {
 	return &MediaViewerComponent{
-		width:         width,
-		height:        height,
-		visible:       false,
-		imageRenderer: media.NewImageRenderer(width-10, height-10, true),
-		audioRenderer: media.NewAudioRenderer(width - 10),
+		width:          width,
+		height:         height,
+		visible:        false,
+		imageRenderer:  media.NewImageRenderer(width-6, height-6, true),
+		mosaicRenderer: media.NewMosaicRenderer(width-6, height-6, true),
+		audioRenderer:  media.NewAudioRenderer(width - 6),
 	}
 }
 
@@ -140,8 +143,32 @@ func (m *MediaViewerComponent) ShowMedia(message *types.Message, mediaPath strin
 	m.downloading = false
 	m.downloadedPath = mediaPath
 
-	// Check if media needs to be downloaded
-	if message.Content.Media != nil && !message.Content.Media.IsDownloaded {
+	// DEFENSIVE CHECK: Don't trust IsDownloaded blindly
+	// Verify that the file actually exists before trying to render
+	needsDownload := false
+	if message.Content.Media != nil {
+		if !message.Content.Media.IsDownloaded {
+			// Case 1: Marked as not downloaded
+			needsDownload = true
+		} else if message.Content.Media.LocalPath == "" {
+			// Case 2: Marked as downloaded but no path
+			needsDownload = true
+			message.Content.Media.IsDownloaded = false // Fix stale state
+		} else {
+			// Case 3: Marked as downloaded with a path - verify file exists
+			if _, err := os.Stat(message.Content.Media.LocalPath); os.IsNotExist(err) {
+				needsDownload = true
+				message.Content.Media.IsDownloaded = false // Fix stale state
+			} else if err != nil {
+				// Other error (permission, etc)
+				needsDownload = true
+				message.Content.Media.IsDownloaded = false
+			}
+		}
+	}
+
+	// Download if needed
+	if needsDownload {
 		m.downloading = true
 		return func() tea.Msg {
 			return MediaDownloadRequestMsg{
@@ -150,7 +177,7 @@ func (m *MediaViewerComponent) ShowMedia(message *types.Message, mediaPath strin
 		}
 	}
 
-	// Render immediately if already downloaded
+	// Render immediately if file exists
 	m.renderMedia()
 	return nil
 }
@@ -169,9 +196,10 @@ func (m *MediaViewerComponent) IsVisible() bool {
 func (m *MediaViewerComponent) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	// Update renderer dimensions
-	m.imageRenderer.SetDimensions(width-10, height-10)
-	m.audioRenderer.SetMaxWidth(width - 10)
+	// Update renderer dimensions - maximize available space while leaving room for borders
+	m.imageRenderer.SetDimensions(width-6, height-6)
+	m.mosaicRenderer.SetDimensions(width-6, height-6)
+	m.audioRenderer.SetMaxWidth(width - 6)
 }
 
 // renderMedia renders the media based on its type.
@@ -181,14 +209,15 @@ func (m *MediaViewerComponent) renderMedia() {
 	}
 
 	var err error
-	contentWidth := m.width - 6
-	contentHeight := m.height - 10
+	// Maximize content area - account for border (4 chars), padding (4 chars), title/footer (6 lines)
+	contentWidth := m.width - 8
+	contentHeight := m.height - 12
 
 	switch m.message.Content.Type {
 	case types.MessageTypePhoto:
-		// Render image as ASCII art
-		m.imageRenderer.SetDimensions(contentWidth, contentHeight)
-		m.content, err = m.imageRenderer.RenderImageFile(m.downloadedPath)
+		// Render image using mosaic (Unicode half-blocks) for better quality
+		m.mosaicRenderer.SetDimensions(contentWidth, contentHeight)
+		m.content, err = m.mosaicRenderer.RenderImageFile(m.downloadedPath)
 		if err != nil {
 			m.renderError = err
 		}

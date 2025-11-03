@@ -34,7 +34,7 @@ type ConversationModel struct {
 	sendingMessage bool                             // Flag to show sending state
 	typingUsers    map[int64]time.Time              // userID -> when they started typing
 	mediaViewer    *components.MediaViewerComponent // Media viewer modal
-	selectedMsgIdx int                              // Index of selected message for media viewing
+	selectedMsgIdx int                              // Index of selected message for navigation and media viewing
 }
 
 // NewConversationModel creates a new conversation model.
@@ -93,6 +93,12 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 			case "down", "j":
 				m.viewport.LineDown(1)
 				return m, nil
+			case "ctrl+p", "shift+up":
+				// Select previous message
+				return m, m.selectPreviousMessage()
+			case "ctrl+n", "shift+down":
+				// Select next message
+				return m, m.selectNextMessage()
 			case "ctrl+u":
 				// Scroll up half page (faster navigation)
 				m.viewport.HalfViewUp()
@@ -118,24 +124,33 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 				m.ClearReplyEdit()
 				return m, m.input.Focus()
 			case "r":
-				// Reply to last message (since we don't have message selection in viewport mode)
-				if len(m.messages) > 0 {
+				// Reply to selected message if available, otherwise last message
+				if m.selectedMsgIdx >= 0 && m.selectedMsgIdx < len(m.messages) {
+					m.SetReplyTo(m.messages[m.selectedMsgIdx])
+					return m, m.input.Focus()
+				} else if len(m.messages) > 0 {
 					m.SetReplyTo(m.messages[len(m.messages)-1])
 					return m, m.input.Focus()
 				}
 				return m, nil
 			case "e":
-				// Edit last outgoing message (since we don't have message selection in viewport mode)
-				for i := len(m.messages) - 1; i >= 0; i-- {
-					if m.messages[i].IsOutgoing {
-						m.SetEditing(m.messages[i])
-						return m, m.input.Focus()
-						break
+				// Edit selected outgoing message if available, otherwise last outgoing message
+				if m.selectedMsgIdx >= 0 && m.selectedMsgIdx < len(m.messages) && m.messages[m.selectedMsgIdx].IsOutgoing {
+					m.SetEditing(m.messages[m.selectedMsgIdx])
+					return m, m.input.Focus()
+				} else {
+					// Fallback: find last outgoing message
+					for i := len(m.messages) - 1; i >= 0; i-- {
+						if m.messages[i].IsOutgoing {
+							m.SetEditing(m.messages[i])
+							return m, m.input.Focus()
+							break
+						}
 					}
 				}
 				return m, nil
 			case "enter":
-				// Open media viewer for last message with media
+				// Open media viewer for selected message if available
 				return m, m.openMediaViewer()
 			}
 		}
@@ -442,7 +457,7 @@ func (m *ConversationModel) renderAllMessages() string {
 	currentUserID := m.client.GetCurrentUserID()
 
 	var messageViews []string
-	for _, message := range m.messages {
+	for i, message := range m.messages {
 		// Get sender name from cache for incoming messages
 		senderName := ""
 		if !message.IsOutgoing {
@@ -459,8 +474,11 @@ func (m *ConversationModel) renderAllMessages() string {
 			}
 		}
 
+		// Check if this message is selected
+		isSelected := i == m.selectedMsgIdx
+
 		// Use viewport width for message rendering so messages use full available space
-		messageComponent := components.NewMessageComponentWithUser(message, m.viewport.Width, currentUserID, senderName)
+		messageComponent := components.NewMessageComponentWithSelection(message, m.viewport.Width, currentUserID, senderName, isSelected)
 		messageViews = append(messageViews, messageComponent.Render())
 	}
 
@@ -492,11 +510,19 @@ func (m *ConversationModel) renderTypingIndicator() string {
 func (m *ConversationModel) loadMessages() {
 	if m.currentChat == nil {
 		m.messages = []*types.Message{}
+		m.selectedMsgIdx = -1
 		return
 	}
 
 	// Load messages from cache
 	m.messages = m.cache.GetMessages(m.currentChat.ID)
+
+	// Initialize selection to last message
+	if len(m.messages) > 0 {
+		m.selectedMsgIdx = len(m.messages) - 1
+	} else {
+		m.selectedMsgIdx = -1
+	}
 
 	// TODO: Load more messages from server if needed
 	// For now, we just use cached messages
@@ -590,11 +616,25 @@ func (m *ConversationModel) SetCurrentChat(chat *types.Chat) {
 	m.input.Clear()
 	m.ClearReplyEdit()
 	m.loadMessages()
+	// Reset selection to last message
+	if len(m.messages) > 0 {
+		m.selectedMsgIdx = len(m.messages) - 1
+	} else {
+		m.selectedMsgIdx = -1
+	}
 }
 
 // SetMessages sets the messages for the current chat.
 func (m *ConversationModel) SetMessages(messages []*types.Message) {
 	m.messages = messages
+	// Keep selection valid, default to last message if invalid
+	if m.selectedMsgIdx < 0 || m.selectedMsgIdx >= len(m.messages) {
+		if len(m.messages) > 0 {
+			m.selectedMsgIdx = len(m.messages) - 1
+		} else {
+			m.selectedMsgIdx = -1
+		}
+	}
 	m.updateViewport()
 }
 
@@ -679,6 +719,15 @@ func (m *ConversationModel) ClearReplyEdit() {
 // AddMessage adds a message to the conversation.
 func (m *ConversationModel) AddMessage(message *types.Message) {
 	m.messages = append(m.messages, message)
+	// Keep selection on the same message by index (it will shift as new messages arrive)
+	// If selection is at last message, move it to the new last message
+	if m.selectedMsgIdx == len(m.messages)-2 {
+		m.selectedMsgIdx = len(m.messages) - 1
+	}
+	// Ensure selection is valid
+	if m.selectedMsgIdx < 0 || m.selectedMsgIdx >= len(m.messages) {
+		m.selectedMsgIdx = len(m.messages) - 1
+	}
 	m.updateViewport()
 }
 
@@ -740,16 +789,52 @@ func (m *ConversationModel) GetTypingUsers() []int64 {
 	return typing
 }
 
-// openMediaViewer opens the media viewer for the last message with media.
+// openMediaViewer opens the media viewer for the selected message or last message with media.
 func (m *ConversationModel) openMediaViewer() tea.Cmd {
-	// Find the last message with media (going backwards)
+	// If a message is selected and has viewable media, open it
+	if m.selectedMsgIdx >= 0 && m.selectedMsgIdx < len(m.messages) {
+		message := m.messages[m.selectedMsgIdx]
+		if m.hasViewableMedia(message) {
+			mediaPath := ""
+			if message.Content.Media != nil && message.Content.Media.IsDownloaded {
+				// DEFENSIVE CHECK: Verify the file actually exists
+				localPath := message.Content.Media.LocalPath
+
+				if localPath != "" {
+					if _, err := os.Stat(localPath); err == nil {
+						// File exists, use the path
+						mediaPath = localPath
+					} else {
+						// File doesn't exist or error, pass empty string to trigger download
+						mediaPath = ""
+					}
+				}
+			}
+			return m.mediaViewer.ShowMedia(message, mediaPath)
+		}
+		// Selected message has no viewable media - do nothing (user feedback could be added here)
+		return nil
+	}
+
+	// Fallback: Find the last message with media (going backwards)
 	for i := len(m.messages) - 1; i >= 0; i-- {
 		message := m.messages[i]
 		if m.hasViewableMedia(message) {
 			m.selectedMsgIdx = i
 			mediaPath := ""
 			if message.Content.Media != nil && message.Content.Media.IsDownloaded {
-				mediaPath = message.Content.Media.LocalPath
+				// DEFENSIVE CHECK: Verify the file actually exists
+				localPath := message.Content.Media.LocalPath
+
+				if localPath != "" {
+					if _, err := os.Stat(localPath); err == nil {
+						// File exists, use the path
+						mediaPath = localPath
+					} else {
+						// File doesn't exist or error, pass empty string to trigger download
+						mediaPath = ""
+					}
+				}
 			}
 			return m.mediaViewer.ShowMedia(message, mediaPath)
 		}
@@ -772,21 +857,101 @@ func (m *ConversationModel) hasViewableMedia(message *types.Message) bool {
 func (m *ConversationModel) downloadMediaForViewer(message *types.Message) tea.Cmd {
 	return func() tea.Msg {
 		// Download the media using the telegram client
-		// This is a placeholder - actual implementation depends on your media manager
 		if m.currentChat == nil || message.Content.Media == nil {
 			return components.MediaDownloadedMsg{Path: ""}
 		}
 
-		// TODO: Implement actual media download using MediaManager
-		// For now, we'll just return the existing path if available
-		if message.Content.Media.IsDownloaded && message.Content.Media.LocalPath != "" {
-			return components.MediaDownloadedMsg{
-				Path: message.Content.Media.LocalPath,
-			}
+		// Use the client's DownloadMedia method
+		localPath, err := m.client.DownloadMedia(message)
+		if err != nil {
+			m.client.GetLogger().Error("Failed to download media for viewer", "error", err)
+			return components.MediaDownloadedMsg{Path: ""}
 		}
 
-		// Return empty path to indicate download failure
-		return components.MediaDownloadedMsg{Path: ""}
+		// Update the message in cache with the downloaded path
+		if m.cache != nil {
+			message.Content.Media.LocalPath = localPath
+			message.Content.Media.IsDownloaded = true
+			m.cache.SetMessage(m.currentChat.ID, message)
+		}
+
+		return components.MediaDownloadedMsg{
+			Path: localPath,
+		}
+	}
+}
+
+// selectPreviousMessage selects the previous message in the conversation.
+func (m *ConversationModel) selectPreviousMessage() tea.Cmd {
+	if len(m.messages) == 0 {
+		return nil
+	}
+
+	// If no selection, start at last message
+	if m.selectedMsgIdx < 0 {
+		m.selectedMsgIdx = len(m.messages) - 1
+	} else if m.selectedMsgIdx > 0 {
+		m.selectedMsgIdx--
+	} else {
+		// Wrap around to last message
+		m.selectedMsgIdx = len(m.messages) - 1
+	}
+
+	m.updateViewport()
+	m.scrollToSelectedMessage()
+	return nil
+}
+
+// selectNextMessage selects the next message in the conversation.
+func (m *ConversationModel) selectNextMessage() tea.Cmd {
+	if len(m.messages) == 0 {
+		return nil
+	}
+
+	// If no selection, start at first message
+	if m.selectedMsgIdx < 0 {
+		m.selectedMsgIdx = 0
+	} else if m.selectedMsgIdx < len(m.messages)-1 {
+		m.selectedMsgIdx++
+	} else {
+		// Wrap around to first message
+		m.selectedMsgIdx = 0
+	}
+
+	m.updateViewport()
+	m.scrollToSelectedMessage()
+	return nil
+}
+
+// scrollToSelectedMessage scrolls the viewport to ensure the selected message is visible.
+func (m *ConversationModel) scrollToSelectedMessage() {
+	if m.selectedMsgIdx < 0 || m.selectedMsgIdx >= len(m.messages) {
+		return
+	}
+
+	// Calculate approximate line position of selected message
+	// Each message takes roughly 5-8 lines (header + content + spacing)
+	// This is a simplified calculation - for exact positioning we'd need to track
+	// the actual rendered line positions
+	estimatedLinesPerMessage := 6
+	estimatedLinePos := m.selectedMsgIdx * estimatedLinesPerMessage
+
+	// Get viewport boundaries
+	viewportTop := m.viewport.YOffset
+	viewportBottom := viewportTop + m.viewport.Height
+
+	// Check if selected message is outside viewport
+	if estimatedLinePos < viewportTop {
+		// Message is above viewport - scroll up
+		m.viewport.SetYOffset(estimatedLinePos)
+	} else if estimatedLinePos > viewportBottom-5 {
+		// Message is below viewport - scroll down
+		// Leave some padding (5 lines) to keep context visible
+		newOffset := estimatedLinePos - m.viewport.Height + 5
+		if newOffset < 0 {
+			newOffset = 0
+		}
+		m.viewport.SetYOffset(newOffset)
 	}
 }
 

@@ -160,18 +160,29 @@ const (
 	EntityTypeUnderline
 )
 
+// PhotoSize represents a photo size variant (thumbnail, medium, large, etc.)
+type PhotoSize struct {
+	Type   string // Size type: "s", "m", "x", "y", "w", etc.
+	Width  int
+	Height int
+	Size   int // Size in bytes
+}
+
 // Media represents media content in a message.
 type Media struct {
-	ID           string
-	Width        int
-	Height       int
-	Duration     int
-	Size         int64
-	MimeType     string
-	Thumbnail    *Thumbnail
-	LocalPath    string
-	RemotePath   string
-	IsDownloaded bool
+	ID            string
+	Width         int
+	Height        int
+	Duration      int
+	Size          int64
+	MimeType      string
+	Thumbnail     *Thumbnail
+	LocalPath     string
+	RemotePath    string
+	IsDownloaded  bool
+	AccessHash    int64        // Telegram AccessHash for downloading
+	FileReference []byte       // Telegram FileReference for downloading
+	PhotoSizes    []PhotoSize  // Photo sizes for photos (needed for download)
 }
 
 // Thumbnail represents a thumbnail for media content.

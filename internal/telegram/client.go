@@ -385,6 +385,11 @@ func (c *Client) GetMediaManager() *MediaManager {
 	return c.mediaManager
 }
 
+// GetLogger returns the client's logger.
+func (c *Client) GetLogger() *slog.Logger {
+	return c.logger
+}
+
 // SendMediaMessage sends a media message (photo, video, audio, document).
 func (c *Client) SendMediaMessage(chat *types.Chat, filePath string, caption string, replyToMessageID int64) (*types.Message, error) {
 	if c.mediaManager == nil {
@@ -413,8 +418,91 @@ func (c *Client) DownloadMedia(message *types.Message) (string, error) {
 		return "", fmt.Errorf("media manager not initialized")
 	}
 
-	// This would require access to the original TG message, which we don't store
-	// For now, this is a placeholder - actual implementation would need to fetch
-	// the message from Telegram first to get the file location
-	return "", fmt.Errorf("download media not yet fully implemented - requires message fetch")
+	if message.Content.Media == nil {
+		return "", fmt.Errorf("message has no media")
+	}
+
+	// Check if already downloaded
+	if message.Content.Media.IsDownloaded && message.Content.Media.LocalPath != "" {
+		return message.Content.Media.LocalPath, nil
+	}
+
+	var localPath string
+	var err error
+
+	// Download based on message type
+	switch message.Content.Type {
+	case types.MessageTypePhoto:
+		// Reconstruct photo object from stored metadata
+		photoID, parseErr := strconv.ParseInt(message.Content.Media.ID, 10, 64)
+		if parseErr != nil {
+			return "", fmt.Errorf("invalid photo ID: %w", parseErr)
+		}
+
+		// Reconstruct photo sizes from stored data
+		photoSizes := make([]tg.PhotoSizeClass, 0, len(message.Content.Media.PhotoSizes))
+		for _, size := range message.Content.Media.PhotoSizes {
+			photoSizes = append(photoSizes, &tg.PhotoSize{
+				Type: size.Type,
+				W:    size.Width,
+				H:    size.Height,
+				Size: size.Size,
+			})
+		}
+
+		c.logger.Debug("Reconstructed photo sizes for download",
+			"photoID", photoID,
+			"sizeCount", len(photoSizes),
+			"storedSizes", len(message.Content.Media.PhotoSizes))
+
+		if len(photoSizes) == 0 {
+			c.logger.Warn("No photo sizes available for download - message may be from old cache",
+				"photoID", photoID,
+				"messageID", message.ID)
+			return "", fmt.Errorf("no photo sizes available (message may be from old cache)")
+		}
+
+		photo := &tg.Photo{
+			ID:            photoID,
+			AccessHash:    message.Content.Media.AccessHash,
+			FileReference: message.Content.Media.FileReference,
+			Sizes:         photoSizes, // Use reconstructed sizes
+		}
+
+		localPath, err = c.mediaManager.DownloadPhoto(c.ctx, photo, message.ChatID)
+		if err != nil {
+			return "", fmt.Errorf("failed to download photo: %w", err)
+		}
+
+	case types.MessageTypeVideo, types.MessageTypeAudio, types.MessageTypeVoice, types.MessageTypeDocument:
+		// Reconstruct document object from stored metadata
+		docID, parseErr := strconv.ParseInt(message.Content.Media.ID, 10, 64)
+		if parseErr != nil {
+			return "", fmt.Errorf("invalid document ID: %w", parseErr)
+		}
+
+		doc := &tg.Document{
+			ID:            docID,
+			AccessHash:    message.Content.Media.AccessHash,
+			FileReference: message.Content.Media.FileReference,
+			Size:          message.Content.Media.Size,
+			MimeType:      message.Content.Media.MimeType,
+			Attributes:    []tg.DocumentAttributeClass{}, // Attributes not needed for download
+		}
+
+		localPath, err = c.mediaManager.DownloadDocument(c.ctx, doc, message.ChatID)
+		if err != nil {
+			return "", fmt.Errorf("failed to download document: %w", err)
+		}
+
+	default:
+		return "", fmt.Errorf("unsupported media type: %v", message.Content.Type)
+	}
+
+	// Update the media object with the local path
+	message.Content.Media.LocalPath = localPath
+	message.Content.Media.IsDownloaded = true
+
+	c.logger.Info("Media downloaded successfully", "messageID", message.ID, "path", localPath)
+	return localPath, nil
 }
