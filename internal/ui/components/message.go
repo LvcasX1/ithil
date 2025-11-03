@@ -18,6 +18,7 @@ type MessageComponent struct {
 	Width         int
 	CurrentUserID int64
 	SenderName    string // Cached sender name for display
+	IsSelected    bool   // Whether this message is currently selected
 }
 
 // NewMessageComponent creates a new message component.
@@ -35,6 +36,18 @@ func NewMessageComponentWithUser(message *types.Message, width int, currentUserI
 		Width:         width,
 		CurrentUserID: currentUserID,
 		SenderName:    senderName,
+		IsSelected:    false,
+	}
+}
+
+// NewMessageComponentWithSelection creates a new message component with selection state.
+func NewMessageComponentWithSelection(message *types.Message, width int, currentUserID int64, senderName string, isSelected bool) *MessageComponent {
+	return &MessageComponent{
+		Message:       message,
+		Width:         width,
+		CurrentUserID: currentUserID,
+		SenderName:    senderName,
+		IsSelected:    isSelected,
 	}
 }
 
@@ -46,9 +59,18 @@ func (m *MessageComponent) Render() string {
 
 	var contentBuilder strings.Builder
 
+	// Add selection indicator if selected
+	selectionMarker := ""
+	if m.IsSelected {
+		selectionMarker = styles.HighlightStyle.Render("▶ ")
+	} else {
+		selectionMarker = "  " // Two spaces to align with arrow
+	}
+
 	// Build message header (sender name + timestamp + edited indicator)
 	header := m.renderHeader()
 	if header != "" {
+		contentBuilder.WriteString(selectionMarker)
 		contentBuilder.WriteString(header)
 		contentBuilder.WriteString("\n")
 	}
@@ -56,27 +78,39 @@ func (m *MessageComponent) Render() string {
 	// Render reply if present
 	if m.Message.ReplyToMessageID != 0 {
 		reply := m.renderReply()
-		// Indent reply slightly
-		indentedReply := indentText(reply, 2)
+		// Indent reply slightly (add 2 spaces for selection marker alignment)
+		indentedReply := indentText(reply, 4)
 		contentBuilder.WriteString(indentedReply)
 		contentBuilder.WriteString("\n")
 	}
 
-	// Render main content (indented)
+	// Render main content (indented, add 2 spaces for selection marker alignment)
 	content := m.renderContent()
-	indentedContent := indentText(content, 2)
+	indentedContent := indentText(content, 4)
 	contentBuilder.WriteString(indentedContent)
 
 	// Render footer (views, pinned, etc. - but NOT edited, that's in header)
 	footer := m.renderFooter()
 	if footer != "" {
 		contentBuilder.WriteString("\n")
-		// Indent footer to align with content
-		indentedFooter := indentText(footer, 2)
+		// Indent footer to align with content (add 2 spaces for selection marker alignment)
+		indentedFooter := indentText(footer, 4)
 		contentBuilder.WriteString(indentedFooter)
 	}
 
-	return contentBuilder.String()
+	// If selected, wrap the entire message in a subtle border or background
+	result := contentBuilder.String()
+	if m.IsSelected {
+		// Add a subtle left border to highlight the selected message
+		borderStyle := lipgloss.NewStyle().
+			BorderLeft(true).
+			BorderStyle(lipgloss.ThickBorder()).
+			BorderForeground(lipgloss.Color(styles.AccentCyan)).
+			PaddingLeft(0)
+		result = borderStyle.Render(result)
+	}
+
+	return result
 }
 
 // renderHeader renders the message header (sender name and timestamp).
@@ -269,22 +303,34 @@ func (m *MessageComponent) renderMediaContent(mediaType, caption string, entitie
 
 // renderMediaPreview renders a small inline preview of media.
 func (m *MessageComponent) renderMediaPreview(mediaType, localPath string) string {
-	// Calculate preview dimensions (small for inline display)
-	previewWidth := 30
-	previewHeight := 10
+	// Calculate preview dimensions based on message width
+	// Use more space for better preview quality
+	maxPreviewWidth := m.Width - 8 // Leave margin for indentation (reduced from 10)
+	if maxPreviewWidth > 100 {
+		maxPreviewWidth = 100 // Cap at reasonable size (increased from 80)
+	}
+	if maxPreviewWidth < 60 {
+		maxPreviewWidth = 60 // Minimum size for good quality (increased from 30)
+	}
+
+	previewWidth := maxPreviewWidth
+	previewHeight := 25 // Increased height for better visibility (was 20)
 
 	switch mediaType {
 	case "Photo":
-		// Render small ASCII art thumbnail
-		imageRenderer := media.NewImageRenderer(previewWidth, previewHeight, true)
-		preview, err := imageRenderer.RenderImageFile(localPath)
+		// Render using mosaic (Unicode half-blocks) for better quality
+		mosaicRenderer := media.NewMosaicRenderer(previewWidth, previewHeight, true)
+		preview, err := mosaicRenderer.RenderImageFile(localPath)
 		if err != nil {
 			return styles.DimStyle.Render(fmt.Sprintf("Preview error: %s", err.Error()))
 		}
-		return preview
+		// Add a visual border around the image for better separation
+		borderTop := styles.DimStyle.Render(strings.Repeat("─", min(previewWidth, lipgloss.Width(preview))))
+		borderBottom := styles.DimStyle.Render(strings.Repeat("─", min(previewWidth, lipgloss.Width(preview))))
+		return borderTop + "\n" + preview + "\n" + borderBottom
 
 	case "Audio", "Voice Message":
-		// Render audio waveform preview
+		// Render enhanced audio waveform preview
 		audioRenderer := media.NewAudioRenderer(previewWidth)
 		var preview string
 		var err error
@@ -296,7 +342,9 @@ func (m *MessageComponent) renderMediaPreview(mediaType, localPath string) strin
 		if err != nil {
 			return styles.DimStyle.Render(fmt.Sprintf("Preview error: %s", err.Error()))
 		}
-		return preview
+		// Add playback hint
+		playbackHint := styles.DimStyle.Render("▶ Press Enter to view full audio player")
+		return preview + "\n" + playbackHint
 
 	case "Video":
 		// Show a simple placeholder for videos

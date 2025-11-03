@@ -448,10 +448,27 @@ func (c *Client) convertPhoto(photo *tg.Photo) *types.Media {
 	}
 
 	media := &types.Media{
-		ID: fmt.Sprintf("%d", photo.ID),
+		ID:            fmt.Sprintf("%d", photo.ID),
+		AccessHash:    photo.AccessHash,
+		FileReference: photo.FileReference,
+		PhotoSizes:    make([]types.PhotoSize, 0, len(photo.Sizes)),
 	}
 
-	// Get the largest photo size
+	// Store ALL photo sizes (needed for download)
+	for _, size := range photo.Sizes {
+		if photoSize, ok := size.(*tg.PhotoSize); ok {
+			media.PhotoSizes = append(media.PhotoSizes, types.PhotoSize{
+				Type:   photoSize.Type,
+				Width:  photoSize.W,
+				Height: photoSize.H,
+				Size:   photoSize.Size,
+			})
+		}
+	}
+
+	c.logger.Debug("Stored photo sizes", "photoID", photo.ID, "sizeCount", len(media.PhotoSizes))
+
+	// Get the largest photo size for width/height/size
 	if len(photo.Sizes) > 0 {
 		lastSize := photo.Sizes[len(photo.Sizes)-1]
 		if photoSize, ok := lastSize.(*tg.PhotoSize); ok {
@@ -471,9 +488,11 @@ func (c *Client) convertDocument(doc *tg.Document) *types.Media {
 	}
 
 	media := &types.Media{
-		ID:       fmt.Sprintf("%d", doc.ID),
-		Size:     doc.Size,
-		MimeType: doc.MimeType,
+		ID:            fmt.Sprintf("%d", doc.ID),
+		Size:          doc.Size,
+		MimeType:      doc.MimeType,
+		AccessHash:    doc.AccessHash,
+		FileReference: doc.FileReference,
 	}
 
 	// Extract dimensions and duration from attributes

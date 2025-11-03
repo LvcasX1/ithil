@@ -44,32 +44,112 @@ func (m *MediaManager) GetMediaDirectory() string {
 	return m.mediaDir
 }
 
+// getPhotoSizePriority returns the priority for a given photo size type.
+// Higher priority means better quality/resolution.
+// Telegram photo size types:
+// - "w" (2560x2560) - highest quality
+// - "y" (1280x1280) - high quality
+// - "x" (800x800)   - medium-high quality
+// - "m" (320x320)   - medium quality
+// - "s" (100x100)   - thumbnail quality
+func getPhotoSizePriority(sizeType string) int {
+	priorities := map[string]int{
+		"w": 5, // 2560x2560 - highest
+		"y": 4, // 1280x1280
+		"x": 3, // 800x800
+		"m": 2, // 320x320
+		"s": 1, // 100x100 - thumbnail
+	}
+
+	if priority, ok := priorities[sizeType]; ok {
+		return priority
+	}
+	return 0 // Unknown types get lowest priority
+}
+
+// selectBestPhotoSize selects the best photo size based on priority and byte size.
+// Priority order: w > y > x > m > s
+// Within the same priority level, larger byte size is preferred.
+func selectBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
+	var bestSize *tg.PhotoSize
+	bestPriority := -1
+
+	for _, size := range sizes {
+		photoSize, ok := size.(*tg.PhotoSize)
+		if !ok {
+			continue
+		}
+
+		priority := getPhotoSizePriority(photoSize.Type)
+
+		// Select if:
+		// 1. We don't have a best size yet, OR
+		// 2. This size has higher priority, OR
+		// 3. Same priority but larger byte size
+		if bestSize == nil ||
+			priority > bestPriority ||
+			(priority == bestPriority && photoSize.Size > bestSize.Size) {
+			bestSize = photoSize
+			bestPriority = priority
+		}
+	}
+
+	return bestSize
+}
+
 // DownloadPhoto downloads a photo from a message.
 func (m *MediaManager) DownloadPhoto(ctx context.Context, photo *tg.Photo, chatID int64) (string, error) {
 	if photo == nil {
 		return "", fmt.Errorf("photo is nil")
 	}
 
-	// Get the largest photo size
-	var largestSize *tg.PhotoSize
+	m.client.logger.Debug("DownloadPhoto called",
+		"photoID", photo.ID,
+		"sizeCount", len(photo.Sizes))
+
+	// Log all available sizes for debugging
 	for _, size := range photo.Sizes {
 		if photoSize, ok := size.(*tg.PhotoSize); ok {
-			if largestSize == nil || photoSize.Size > largestSize.Size {
-				largestSize = photoSize
-			}
+			m.client.logger.Debug("Available photo size",
+				"type", photoSize.Type,
+				"priority", getPhotoSizePriority(photoSize.Type),
+				"width", photoSize.W,
+				"height", photoSize.H,
+				"bytes", photoSize.Size)
 		}
 	}
 
-	if largestSize == nil {
+	// Select the best photo size based on priority
+	bestSize := selectBestPhotoSize(photo.Sizes)
+
+	if bestSize == nil {
+		m.client.logger.Error("No valid photo size found",
+			"photoID", photo.ID,
+			"totalSizes", len(photo.Sizes))
 		return "", fmt.Errorf("no valid photo size found")
 	}
+
+	m.client.logger.Info("Selected best photo size for download",
+		"type", bestSize.Type,
+		"priority", getPhotoSizePriority(bestSize.Type),
+		"width", bestSize.W,
+		"height", bestSize.H,
+		"bytes", bestSize.Size)
+
+	// DEBUG: Log before download
+	m.client.logger.Info("About to download photo",
+		"photoID", photo.ID,
+		"sizeType", bestSize.Type,
+		"width", bestSize.W,
+		"height", bestSize.H,
+		"expectedSize", bestSize.Size)
 
 	// Create file location from photo
 	location := &tg.InputPhotoFileLocation{
 		ID:            photo.ID,
 		AccessHash:    photo.AccessHash,
 		FileReference: photo.FileReference,
-		ThumbSize:     largestSize.Type,
+		ThumbSize:     bestSize.Type,
 	}
 
 	// Generate local file path
@@ -82,8 +162,21 @@ func (m *MediaManager) DownloadPhoto(ctx context.Context, photo *tg.Photo, chatI
 	}
 
 	// Download the file
-	if err := m.downloadFile(ctx, location, localPath, int64(largestSize.Size)); err != nil {
+	if err := m.downloadFile(ctx, location, localPath, int64(bestSize.Size)); err != nil {
 		return "", fmt.Errorf("failed to download photo: %w", err)
+	}
+
+	// DEBUG: Log after download with actual file size
+	fileInfo, err := os.Stat(localPath)
+	if err == nil {
+		m.client.logger.Info("Downloaded photo to file",
+			"path", localPath,
+			"actualFileSize", fileInfo.Size(),
+			"expectedSize", bestSize.Size)
+	} else {
+		m.client.logger.Error("Failed to stat downloaded file",
+			"path", localPath,
+			"error", err)
 	}
 
 	return localPath, nil
@@ -412,17 +505,10 @@ func GetMediaFromMessage(msg *tg.Message) (location tg.InputFileLocationClass, s
 			return nil, 0, "", fmt.Errorf("invalid photo type")
 		}
 
-		// Get largest photo size
-		var largestSize *tg.PhotoSize
-		for _, size := range photo.Sizes {
-			if photoSize, ok := size.(*tg.PhotoSize); ok {
-				if largestSize == nil || photoSize.Size > largestSize.Size {
-					largestSize = photoSize
-				}
-			}
-		}
+		// Select the best photo size based on priority
+		bestSize := selectBestPhotoSize(photo.Sizes)
 
-		if largestSize == nil {
+		if bestSize == nil {
 			return nil, 0, "", fmt.Errorf("no valid photo size found")
 		}
 
@@ -430,9 +516,9 @@ func GetMediaFromMessage(msg *tg.Message) (location tg.InputFileLocationClass, s
 			ID:            photo.ID,
 			AccessHash:    photo.AccessHash,
 			FileReference: photo.FileReference,
-			ThumbSize:     largestSize.Type,
+			ThumbSize:     bestSize.Type,
 		}
-		return location, int64(largestSize.Size), fmt.Sprintf("photo_%d.jpg", photo.ID), nil
+		return location, int64(bestSize.Size), fmt.Sprintf("photo_%d.jpg", photo.ID), nil
 
 	case *tg.MessageMediaDocument:
 		doc, ok := media.Document.(*tg.Document)
