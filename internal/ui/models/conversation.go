@@ -93,10 +93,18 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 			case "down", "j":
 				m.viewport.LineDown(1)
 				return m, nil
-			case "pgup":
+			case "ctrl+u":
+				// Scroll up half page (faster navigation)
+				m.viewport.HalfViewUp()
+				return m, nil
+			case "ctrl+d":
+				// Scroll down half page (faster navigation)
+				m.viewport.HalfViewDown()
+				return m, nil
+			case "pgup", "ctrl+b":
 				m.viewport.ViewUp()
 				return m, nil
-			case "pgdown":
+			case "pgdown", "ctrl+f":
 				m.viewport.ViewDown()
 				return m, nil
 			case "g":
