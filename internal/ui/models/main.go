@@ -241,10 +241,12 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case messageSentMsg:
-		// Add the sent message to conversation
-		m.conversation.AddMessage(msg.message)
-		// Update cache
+		// DO NOT add message to conversation UI here - it will be added when
+		// the server sends back the UpdateTypeNewMessage update. This prevents
+		// the message from appearing twice in the UI.
+		// We only update the cache here so the message is stored.
 		m.cache.AddMessage(msg.chatID, msg.message)
+
 		// Update chat last message in cache
 		if chat, exists := m.cache.GetChat(msg.chatID); exists {
 			chat.LastMessage = msg.message
@@ -735,12 +737,10 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 
 		// If this chat is currently open, trigger a message to update the conversation
 		if m.currentChat != nil && m.currentChat.ID == chatID {
-			// IMPORTANT: Skip adding outgoing messages to the conversation UI
-			// because they were already added optimistically when we sent them.
-			// Only add incoming messages (from other users) to avoid duplicates.
-			if !message.IsOutgoing {
-				m.conversation.AddMessage(message)
-			}
+			// Add the message to the conversation UI
+			// This handles both incoming messages (from other users) and outgoing messages
+			// (sent by us and confirmed by the server)
+			m.conversation.AddMessage(message)
 
 			// Update sidebar with new message
 			m.sidebar.SetCurrentChat(m.currentChat)
