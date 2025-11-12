@@ -60,7 +60,8 @@ func (r *MosaicRenderer) RenderImage(img image.Image) (string, error) {
 	targetWidth := r.maxWidth
 	targetHeight := r.maxHeight * 2
 
-	// Resize the image to fit the target dimensions while maintaining aspect ratio
+	// Use Lanczos resampling for best quality when downscaling
+	// Lanczos provides sharp, high-quality results compared to other filters
 	img = imaging.Fit(img, targetWidth, targetHeight, imaging.Lanczos)
 
 	bounds := img.Bounds()

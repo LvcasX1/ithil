@@ -70,8 +70,16 @@ func (r *KittyRenderer) RenderImage(img interface{}) (string, error) {
 	maxPixelWidth := r.maxWidth * 10
 	maxPixelHeight := r.maxHeight * 20
 
-	// Resize while maintaining aspect ratio
-	imgData = imaging.Fit(imgData, maxPixelWidth, maxPixelHeight, imaging.Lanczos)
+	// Get original image dimensions
+	bounds := imgData.Bounds()
+	originalWidth := bounds.Dx()
+	originalHeight := bounds.Dy()
+
+	// Only scale DOWN if image is larger than available space, never scale UP
+	// This preserves original quality for small images like thumbnails
+	if originalWidth > maxPixelWidth || originalHeight > maxPixelHeight {
+		imgData = imaging.Fit(imgData, maxPixelWidth, maxPixelHeight, imaging.Lanczos)
+	}
 
 	// Encode image to PNG format (Kitty supports PNG directly)
 	var buf bytes.Buffer
@@ -133,10 +141,17 @@ func (r *KittyRenderer) RenderImageWithID(filePath string, imageID uint32) (stri
 		return "", fmt.Errorf("failed to decode image: %w", err)
 	}
 
-	// Resize image
+	// Resize image - only scale DOWN, never UP
 	maxPixelWidth := r.maxWidth * 10
 	maxPixelHeight := r.maxHeight * 20
-	img = imaging.Fit(img, maxPixelWidth, maxPixelHeight, imaging.Lanczos)
+
+	bounds := img.Bounds()
+	originalWidth := bounds.Dx()
+	originalHeight := bounds.Dy()
+
+	if originalWidth > maxPixelWidth || originalHeight > maxPixelHeight {
+		img = imaging.Fit(img, maxPixelWidth, maxPixelHeight, imaging.Lanczos)
+	}
 
 	// Encode to PNG
 	var buf bytes.Buffer

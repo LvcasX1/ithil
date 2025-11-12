@@ -371,8 +371,13 @@ func (m *ConversationModel) View() string {
 
 	// If media viewer is visible, overlay it
 	if m.mediaViewer.IsVisible() {
+		// For fullscreen mode, return raw view (though MainModel should handle this)
+		if m.mediaViewer.IsFullscreenMode() {
+			return m.mediaViewer.ViewFullscreen()
+		}
+
+		// For modal mode, center it with Lipgloss
 		viewerView := m.mediaViewer.View()
-		// Center the media viewer
 		overlay := lipgloss.Place(
 			m.width,
 			m.height,
@@ -1390,4 +1395,16 @@ func (m *ConversationModel) reactToMessage(emoji string) tea.Cmd {
 // messageReactedMsg indicates a reaction was sent
 type messageReactedMsg struct {
 	reaction string
+}
+
+// IsMediaViewerFullscreen returns true if the media viewer is visible and in fullscreen mode.
+// This is used by the main model to short-circuit normal rendering.
+func (m *ConversationModel) IsMediaViewerFullscreen() bool {
+	return m.mediaViewer.IsVisible() && m.mediaViewer.IsFullscreenMode()
+}
+
+// GetMediaViewerFullscreenView returns the raw fullscreen view from the media viewer.
+// This should only be called when IsMediaViewerFullscreen() returns true.
+func (m *ConversationModel) GetMediaViewerFullscreenView() string {
+	return m.mediaViewer.ViewFullscreen()
 }

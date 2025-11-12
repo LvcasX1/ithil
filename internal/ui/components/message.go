@@ -307,17 +307,17 @@ func (m *MessageComponent) renderMediaContent(mediaType, caption string, entitie
 // renderMediaPreview renders a small inline preview of media.
 func (m *MessageComponent) renderMediaPreview(mediaType, localPath string) string {
 	// Calculate preview dimensions based on message width
-	// Use more space for better preview quality
-	maxPreviewWidth := m.Width - 8 // Leave margin for indentation (reduced from 10)
-	if maxPreviewWidth > 100 {
-		maxPreviewWidth = 100 // Cap at reasonable size (increased from 80)
+	// Keep thumbnails small for inline preview - users can press Enter for fullscreen
+	maxPreviewWidth := m.Width - 8 // Leave margin for indentation
+	if maxPreviewWidth > 50 {
+		maxPreviewWidth = 50 // Cap at reasonable inline size
 	}
-	if maxPreviewWidth < 60 {
-		maxPreviewWidth = 60 // Minimum size for good quality (increased from 30)
+	if maxPreviewWidth < 30 {
+		maxPreviewWidth = 30 // Minimum size for visibility
 	}
 
 	previewWidth := maxPreviewWidth
-	previewHeight := 25 // Increased height for better visibility (was 20)
+	previewHeight := 12 // Compact height for inline preview
 
 	switch mediaType {
 	case "Photo":
