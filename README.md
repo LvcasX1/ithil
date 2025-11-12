@@ -10,7 +10,9 @@
 
 Ithil is **production-ready** for daily use! All core features are implemented and stable.
 
-✅ **Complete:** Authentication, real-time messaging, chat management, message history, read receipts, typing indicators, message editing, message deletion, message forwarding, message reactions, rich text formatting, stealth mode, media support (images, audio, video), voice messages, video notes, chat pinning/muting/archiving
+✅ **Complete:** Authentication, real-time messaging, chat management, message history, read receipts, typing indicators, message editing, message deletion, message forwarding, message reactions, rich text formatting, stealth mode, chat pinning/muting/archiving
+
+⚠️ **Partially Complete:** Media support (images, audio, video), voice messages, video notes
 
 🔜 **Planned:** Notifications, advanced search, inline bots, secret chats, multiple themes, media caching
 
@@ -565,12 +567,14 @@ Ithil uses a sophisticated update handling system:
 
 ## Recent Enhancements
 
-### Media Support ✅ (v0.3.0)
+### Media Support ⚠️ (Partially Implemented - v0.3.0)
 - **Image Rendering**: Display photos and stickers in terminal using Kitty/Sixel protocols or Unicode half-blocks
 - **Audio Playback**: Play voice messages and audio files with waveform visualization
 - **Video Notes**: Support for round video messages with preview and playback
 - **Media Viewer**: Dedicated media viewer component with keyboard navigation
 - **File Management**: Download and cache media files with configurable limits
+
+**Note:** Media support is functional but not fully complete. Some edge cases and advanced features are still in development.
 
 ### Navigation Improvements ✅ (v0.2.0)
 - **Centered Selection**: Message selection cursor (▶) stays centered in viewport for better context
