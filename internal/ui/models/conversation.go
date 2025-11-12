@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -415,24 +414,23 @@ func (m *ConversationModel) renderConversationView() string {
 
 	// Create custom top border with embedded title
 	title := " " + m.currentChat.Title + " "
-	// Use UTF-8 rune count for accurate visual width (handles multi-byte characters like á, ñ, etc.)
-	titleLen := utf8.RuneCountInString(title)
+	// Use lipgloss.Width() for accurate display width (handles emojis, wide chars, etc.)
+	titleLen := lipgloss.Width(title)
 
 	// Truncate title if too long
 	maxTitleLen := m.width - 6 // Reserve space for "┌─", "─┐", and some dashes
 	if titleLen > maxTitleLen {
 		if maxTitleLen > 7 {
-			// Convert to runes for proper truncation of UTF-8 strings
+			// Truncate by gradually removing runes until display width fits
 			titleRunes := []rune(m.currentChat.Title)
-			truncatedLen := maxTitleLen - 7
-			if truncatedLen > len(titleRunes) {
-				truncatedLen = len(titleRunes)
+			for len(titleRunes) > 0 && lipgloss.Width(" "+string(titleRunes)+"... ") > maxTitleLen {
+				titleRunes = titleRunes[:len(titleRunes)-1]
 			}
-			title = " " + string(titleRunes[:truncatedLen]) + "... "
-			titleLen = utf8.RuneCountInString(title)
+			title = " " + string(titleRunes) + "... "
+			titleLen = lipgloss.Width(title)
 		} else {
 			title = " ... "
-			titleLen = 5
+			titleLen = lipgloss.Width(title)
 		}
 	}
 
