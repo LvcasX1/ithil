@@ -8,7 +8,9 @@ project_name: ithil
 before:
   hooks:
     - go mod tidy
-    - go test ./...
+    - cmd: go test ./...
+      env:
+        - CGO_ENABLED=0
 
 builds:
   - id: ithil
