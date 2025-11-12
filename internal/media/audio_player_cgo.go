@@ -1,3 +1,5 @@
+//go:build cgo
+
 // Package media provides media playback utilities.
 package media
 

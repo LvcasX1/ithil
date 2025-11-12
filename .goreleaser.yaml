@@ -34,9 +34,10 @@ builds:
 
 archives:
   - id: default
+    formats: ['tar.gz']
     format_overrides:
       - goos: windows
-        format: zip
+        formats: ['zip']
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -78,6 +79,8 @@ changelog:
       order: 999
 
 # Homebrew
+# Note: 'brews' is being deprecated but is still the correct field for CLI applications in GoReleaser v2
+# It will be renamed in a future version, but for now this is the recommended approach
 brews:
   - repository:
       owner: lvcasx1
@@ -100,34 +103,36 @@ brews:
       Then edit the configuration file with your Telegram API credentials from https://my.telegram.org
 
 # Chocolatey (Windows)
-chocolateys:
-  - name: ithil
-    title: Ithil TUI Telegram Client
-    authors: LvcasX1
-    project_url: https://github.com/lvcasx1/ithil
-    copyright: 2025 LvcasX1
-    license_url: https://github.com/lvcasx1/ithil/blob/master/LICENSE
-    require_license_acceptance: false
-    project_source_url: https://github.com/lvcasx1/ithil
-    docs_url: https://github.com/lvcasx1/ithil/blob/master/README.md
-    bug_tracker_url: https://github.com/lvcasx1/ithil/issues
-    tags: "telegram tui terminal chat messaging go bubbletea"
-    summary: A Terminal User Interface Telegram client built with Go
-    description: |
-      Ithil is a feature-rich Terminal User Interface (TUI) Telegram client
-      built with Go and Bubbletea. It brings the full Telegram experience
-      to your terminal with a beautiful, keyboard-driven interface.
-
-      Features:
-      - Full Telegram authentication and real-time messaging
-      - Message editing, deletion, forwarding, and reactions
-      - Media support (images, audio, video, voice notes)
-      - Chat management (pin, mute, archive)
-      - Stealth mode and privacy controls
-      - Beautiful TUI with vim-style navigation
-    release_notes: "https://github.com/lvcasx1/ithil/releases/tag/v{{ .Version }}"
-    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
-    skip_publish: true
+# Disabled for local testing (requires choco to be installed)
+# Will work on GitHub Actions which has choco pre-installed
+# chocolateys:
+#   - name: ithil
+#     title: Ithil TUI Telegram Client
+#     authors: LvcasX1
+#     project_url: https://github.com/lvcasx1/ithil
+#     copyright: 2025 LvcasX1
+#     license_url: https://github.com/lvcasx1/ithil/blob/master/LICENSE
+#     require_license_acceptance: false
+#     project_source_url: https://github.com/lvcasx1/ithil
+#     docs_url: https://github.com/lvcasx1/ithil/blob/master/README.md
+#     bug_tracker_url: https://github.com/lvcasx1/ithil/issues
+#     tags: "telegram tui terminal chat messaging go bubbletea"
+#     summary: A Terminal User Interface Telegram client built with Go
+#     description: |
+#       Ithil is a feature-rich Terminal User Interface (TUI) Telegram client
+#       built with Go and Bubbletea. It brings the full Telegram experience
+#       to your terminal with a beautiful, keyboard-driven interface.
+#
+#       Features:
+#       - Full Telegram authentication and real-time messaging
+#       - Message editing, deletion, forwarding, and reactions
+#       - Media support (images, audio, video, voice notes)
+#       - Chat management (pin, mute, archive)
+#       - Stealth mode and privacy controls
+#       - Beautiful TUI with vim-style navigation
+#     release_notes: "https://github.com/lvcasx1/ithil/releases/tag/v{{ .Version }}"
+#     api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
+#     skip_publish: true
 
 # Scoop (Windows)
 scoops:
@@ -209,42 +214,44 @@ aurs:
       email: contact@lvcasx1.dev
 
 # Snapcraft (Universal Linux)
-snapcrafts:
-  - id: ithil
-    name: ithil
-    summary: TUI Telegram Client
-    description: |
-      Ithil is a feature-rich Terminal User Interface (TUI) Telegram client
-      built with Go and Bubbletea. It brings the full Telegram experience
-      to your terminal with a beautiful, keyboard-driven interface.
-
-      Features:
-      - Full Telegram authentication and real-time messaging
-      - Message editing, deletion, forwarding, and reactions
-      - Media support (images, audio, video, voice notes)
-      - Chat management (pin, mute, archive)
-      - Stealth mode and privacy controls
-      - Beautiful TUI with vim-style navigation
-
-    publish: false  # Set to true when ready to publish
-    grade: stable
-    confinement: strict
-    license: MIT
-
-    base: core22
-
-    apps:
-      ithil:
-        command: ithil
-        plugs:
-          - home
-          - network
-          - network-bind
-
-    extra_files:
-      - source: config.example.yaml
-        destination: config.example.yaml
-        mode: 0644
+# Disabled for local testing (requires snapcraft to be installed)
+# Will work on GitHub Actions which has snapcraft pre-installed
+# snapcrafts:
+#   - id: ithil
+#     name: ithil
+#     summary: TUI Telegram Client
+#     description: |
+#       Ithil is a feature-rich Terminal User Interface (TUI) Telegram client
+#       built with Go and Bubbletea. It brings the full Telegram experience
+#       to your terminal with a beautiful, keyboard-driven interface.
+#
+#       Features:
+#       - Full Telegram authentication and real-time messaging
+#       - Message editing, deletion, forwarding, and reactions
+#       - Media support (images, audio, video, voice notes)
+#       - Chat management (pin, mute, archive)
+#       - Stealth mode and privacy controls
+#       - Beautiful TUI with vim-style navigation
+#
+#     publish: false  # Set to true when ready to publish
+#     grade: stable
+#     confinement: strict
+#     license: MIT
+#
+#     base: core22
+#
+#     apps:
+#       ithil:
+#         command: ithil
+#         plugs:
+#           - home
+#           - network
+#           - network-bind
+#
+#     extra_files:
+#       - source: config.example.yaml
+#         destination: config.example.yaml
+#         mode: 0644
 
 # Release settings
 release:
