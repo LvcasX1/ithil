@@ -27,6 +27,7 @@ type MediaViewerComponent struct {
 	kittyRenderer    *media.KittyRenderer
 	sixelRenderer    *media.SixelRenderer
 	audioRenderer    *media.AudioRenderer
+	externalAudioPlayer *media.AudioPlayer // External audio player for background playback
 	protocolDetector *media.ProtocolDetector
 	detectedProtocol media.GraphicsProtocol
 	renderError      error
@@ -76,8 +77,10 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 
 		switch msg.String() {
 		case "esc", "q":
-			// Stop playback if playing audio
-			if isAudioMessage {
+			// Stop playback if playing audio and using external player
+			if isAudioMessage && m.externalAudioPlayer != nil {
+				m.externalAudioPlayer.Stop()
+			} else if isAudioMessage {
 				m.audioRenderer.GetAudioPlayer().Stop()
 			}
 			m.stopUIRefresh()
@@ -89,31 +92,73 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 		// Audio playback controls
 		case " ":
 			if isAudioMessage {
-				m.audioRenderer.GetAudioPlayer().TogglePlayPause()
+				// Use external player if available, otherwise use local renderer's player
+				if m.externalAudioPlayer != nil {
+					m.externalAudioPlayer.TogglePlayPause()
+				} else {
+					m.audioRenderer.GetAudioPlayer().TogglePlayPause()
+				}
 				m.renderMedia()
 			}
 
 		case "left":
 			if isAudioMessage {
-				m.audioRenderer.GetAudioPlayer().SkipBackward(5 * time.Second)
+				if m.externalAudioPlayer != nil {
+					m.externalAudioPlayer.SkipBackward(5 * time.Second)
+				} else {
+					m.audioRenderer.GetAudioPlayer().SkipBackward(5 * time.Second)
+				}
 				m.renderMedia()
 			}
 
 		case "right":
 			if isAudioMessage {
-				m.audioRenderer.GetAudioPlayer().SkipForward(5 * time.Second)
+				if m.externalAudioPlayer != nil {
+					m.externalAudioPlayer.SkipForward(5 * time.Second)
+				} else {
+					m.audioRenderer.GetAudioPlayer().SkipForward(5 * time.Second)
+				}
 				m.renderMedia()
 			}
 
 		case "up":
 			if isAudioMessage {
-				m.audioRenderer.GetAudioPlayer().VolumeUp()
+				if m.externalAudioPlayer != nil {
+					m.externalAudioPlayer.VolumeUp()
+				} else {
+					m.audioRenderer.GetAudioPlayer().VolumeUp()
+				}
 				m.renderMedia()
 			}
 
 		case "down":
 			if isAudioMessage {
-				m.audioRenderer.GetAudioPlayer().VolumeDown()
+				if m.externalAudioPlayer != nil {
+					m.externalAudioPlayer.VolumeDown()
+				} else {
+					m.audioRenderer.GetAudioPlayer().VolumeDown()
+				}
+				m.renderMedia()
+			}
+
+		// Speed control
+		case "[":
+			if isAudioMessage {
+				if m.externalAudioPlayer != nil {
+					m.externalAudioPlayer.SpeedDown()
+				} else {
+					m.audioRenderer.GetAudioPlayer().SpeedDown()
+				}
+				m.renderMedia()
+			}
+
+		case "]":
+			if isAudioMessage {
+				if m.externalAudioPlayer != nil {
+					m.externalAudioPlayer.SpeedUp()
+				} else {
+					m.audioRenderer.GetAudioPlayer().SpeedUp()
+				}
 				m.renderMedia()
 			}
 		}
@@ -300,11 +345,20 @@ func (m *MediaViewerComponent) ShowMedia(message *types.Message, mediaPath strin
 	// For audio/voice messages, load the file and start UI refresh
 	if message.Content.Type == types.MessageTypeAudio ||
 		message.Content.Type == types.MessageTypeVoice {
-		// Load audio file
-		audioPlayer := m.audioRenderer.GetAudioPlayer()
+		// Load audio file into the appropriate player
+		var audioPlayer *media.AudioPlayer
+		if m.externalAudioPlayer != nil {
+			// Use external player for background playback
+			audioPlayer = m.externalAudioPlayer
+		} else {
+			// Fallback to local renderer's player
+			audioPlayer = m.audioRenderer.GetAudioPlayer()
+		}
+
 		if err := audioPlayer.LoadFile(m.downloadedPath); err != nil {
 			m.renderError = err
 		}
+
 		// Start UI refresh for playback updates
 		m.startUIRefresh()
 		return m.scheduleRefresh()
@@ -315,11 +369,16 @@ func (m *MediaViewerComponent) ShowMedia(message *types.Message, mediaPath strin
 
 // Hide hides the media viewer.
 func (m *MediaViewerComponent) Hide() {
-	// Stop audio playback if playing
+	// DON'T stop audio playback when using external player (for background playback)
+	// Only stop if using local renderer's player
 	if m.message != nil &&
 		(m.message.Content.Type == types.MessageTypeAudio ||
 			m.message.Content.Type == types.MessageTypeVoice) {
-		m.audioRenderer.GetAudioPlayer().Stop()
+		// Only stop if NOT using external player (local playback only)
+		if m.externalAudioPlayer == nil {
+			m.audioRenderer.GetAudioPlayer().Stop()
+		}
+		// If using external player, audio continues in background
 	}
 	m.stopUIRefresh()
 	m.visible = false
@@ -340,6 +399,11 @@ func (m *MediaViewerComponent) SetSize(width, height int) {
 	m.kittyRenderer.SetDimensions(width-6, height-6)
 	m.sixelRenderer.SetDimensions(width-6, height-6)
 	m.audioRenderer.SetMaxWidth(width - 6)
+}
+
+// SetExternalAudioPlayer sets an external audio player for background playback.
+func (m *MediaViewerComponent) SetExternalAudioPlayer(player *media.AudioPlayer) {
+	m.externalAudioPlayer = player
 }
 
 // renderMedia renders the media based on its type.

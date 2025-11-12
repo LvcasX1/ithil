@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lvcasx1/ithil/internal/cache"
+	"github.com/lvcasx1/ithil/internal/media"
 	"github.com/lvcasx1/ithil/internal/telegram"
 	"github.com/lvcasx1/ithil/internal/ui/components"
 	"github.com/lvcasx1/ithil/internal/ui/styles"
@@ -1405,4 +1406,9 @@ func (m *ConversationModel) IsMediaViewerFullscreen() bool {
 // This should only be called when IsMediaViewerFullscreen() returns true.
 func (m *ConversationModel) GetMediaViewerFullscreenView() string {
 	return m.mediaViewer.ViewFullscreen()
+}
+
+// SetExternalAudioPlayer sets the external audio player on the media viewer for background playback.
+func (m *ConversationModel) SetExternalAudioPlayer(player *media.AudioPlayer) {
+	m.mediaViewer.SetExternalAudioPlayer(player)
 }

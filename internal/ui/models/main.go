@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lvcasx1/ithil/internal/app"
 	"github.com/lvcasx1/ithil/internal/cache"
+	"github.com/lvcasx1/ithil/internal/media"
 	"github.com/lvcasx1/ithil/internal/telegram"
 	"github.com/lvcasx1/ithil/internal/ui/components"
 	"github.com/lvcasx1/ithil/internal/ui/keys"
@@ -55,6 +56,12 @@ type MainModel struct {
 	showFilePicker bool
 	showSettings   bool
 	errorMessage   string
+
+	// Global audio player for background playback
+	globalAudioPlayer *media.AudioPlayer
+	audioPlayingFile  string         // Path to current audio file
+	audioPlayingChat  int64          // Chat ID where audio is from
+	audioMessage      *types.Message // Message containing the audio
 }
 
 // NewMainModel creates a new main model.
@@ -75,6 +82,14 @@ func NewMainModel(config *app.Config, client *telegram.Client) *MainModel {
 	// Don't check auth status here - it's not ready yet (client connecting asynchronously)
 	// Will be set via checkAuthStatus() in Init()
 
+	// Initialize global audio player first
+	globalPlayer := media.NewAudioPlayer()
+
+	// Create conversation model
+	conversationModel := NewConversationModel(client, cache)
+	// Connect external audio player to conversation's media viewer for background playback
+	conversationModel.SetExternalAudioPlayer(globalPlayer)
+
 	return &MainModel{
 		config:        config,
 		client:        client,
@@ -87,11 +102,14 @@ func NewMainModel(config *app.Config, client *telegram.Client) *MainModel {
 		// Initialize sub-models
 		auth:         NewAuthModel(client),
 		chatList:     NewChatListModel(cache),
-		conversation: NewConversationModel(client, cache),
+		conversation: conversationModel,
 		sidebar:      NewSidebarModel(cache),
 		settings:     NewSettingsModel(config),
 		statusBar:    components.NewStatusBarComponent(100),
 		helpModal:    components.NewHelpModalComponent(),
+
+		// Use the same global audio player instance
+		globalAudioPlayer: globalPlayer,
 	}
 }
 
@@ -155,6 +173,31 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+s":
 			m.sidebar.ToggleVisible()
 			return m, m.recalculateLayout()
+		case "ctrl+p":
+			// Global audio play/pause control
+			if m.globalAudioPlayer != nil {
+				m.globalAudioPlayer.TogglePlayPause()
+				m.updateAudioStatusBar()
+			}
+			return m, nil
+		case "ctrl+[":
+			// Global audio speed down control
+			if m.authenticated && m.conversation != nil && !m.conversation.input.Focused {
+				if m.globalAudioPlayer != nil {
+					m.globalAudioPlayer.SpeedDown()
+					m.updateAudioStatusBar()
+				}
+				return m, nil
+			}
+		case "ctrl+]":
+			// Global audio speed up control
+			if m.authenticated && m.conversation != nil && !m.conversation.input.Focused {
+				if m.globalAudioPlayer != nil {
+					m.globalAudioPlayer.SpeedUp()
+					m.updateAudioStatusBar()
+				}
+				return m, nil
+			}
 		case "S":
 			// Only toggle stealth mode if input is not focused (so users can type "S" in messages)
 			if m.authenticated && m.conversation != nil && !m.conversation.input.Focused {
@@ -978,4 +1021,36 @@ func convertUserStatus(status interface{}) types.UserStatus {
 	}
 
 	return types.UserStatusOffline
+}
+
+// updateAudioStatusBar updates the status bar with current audio playback state.
+func (m *MainModel) updateAudioStatusBar() {
+	if m.globalAudioPlayer == nil {
+		return
+	}
+
+	state := m.globalAudioPlayer.GetState()
+	if state == media.StateStopped {
+		m.statusBar.ClearAudioPlayback()
+		return
+	}
+
+	// Get playback info
+	position := m.globalAudioPlayer.GetPosition()
+	duration := m.globalAudioPlayer.GetDuration()
+	speed := m.globalAudioPlayer.GetSpeed()
+
+	// Get filename from message or file path
+	filename := "Audio"
+	if m.audioMessage != nil && m.audioMessage.Content.Document != nil {
+		filename = m.audioMessage.Content.Document.FileName
+	} else if m.audioPlayingFile != "" {
+		// Extract filename from path
+		parts := strings.Split(m.audioPlayingFile, "/")
+		if len(parts) > 0 {
+			filename = parts[len(parts)-1]
+		}
+	}
+
+	m.statusBar.SetAudioPlayback(filename, position, duration, state, speed)
 }

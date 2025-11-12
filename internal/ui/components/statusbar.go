@@ -4,8 +4,10 @@ package components
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lvcasx1/ithil/internal/media"
 	"github.com/lvcasx1/ithil/internal/ui/styles"
 )
 
@@ -27,6 +29,14 @@ type StatusBarComponent struct {
 	FilterName       string
 	AppVersion       string
 	Message          string
+
+	// Audio playback state
+	AudioPlaying  bool
+	AudioFilename string
+	AudioPosition time.Duration
+	AudioDuration time.Duration
+	AudioState    media.PlaybackState
+	AudioSpeed    float64 // Playback speed (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x)
 }
 
 // NewStatusBarComponent creates a new status bar component.
@@ -121,6 +131,11 @@ func (s *StatusBarComponent) renderLeftSection() string {
 
 // renderMiddleSection renders the middle section of the status bar with enhanced styling.
 func (s *StatusBarComponent) renderMiddleSection() string {
+	// Audio playback takes priority
+	if s.AudioPlaying {
+		return s.renderAudioPlayback()
+	}
+
 	if s.Message != "" {
 		icon := "ℹ️"
 		return lipgloss.NewStyle().
@@ -148,6 +163,55 @@ func (s *StatusBarComponent) renderMiddleSection() string {
 		Foreground(lipgloss.Color(styles.TextSecondary)).
 		Italic(true).
 		Render("Ready")
+}
+
+// renderAudioPlayback renders the audio playback status.
+func (s *StatusBarComponent) renderAudioPlayback() string {
+	// State icon
+	var stateIcon string
+	switch s.AudioState {
+	case media.StatePlaying:
+		stateIcon = "▶"
+	case media.StatePaused:
+		stateIcon = "⏸"
+	default:
+		stateIcon = "⏹"
+	}
+
+	// Format time
+	positionStr := formatTime(s.AudioPosition)
+	durationStr := formatTime(s.AudioDuration)
+
+	// Truncate filename if too long
+	filename := s.AudioFilename
+	if len(filename) > 30 {
+		filename = filename[:27] + "..."
+	}
+
+	// Build status string with speed indicator
+	speedStr := ""
+	if s.AudioSpeed != 1.0 {
+		speedStr = fmt.Sprintf(" %.2fx", s.AudioSpeed)
+	}
+	status := fmt.Sprintf("%s %s [%s/%s]%s", stateIcon, filename, positionStr, durationStr, speedStr)
+
+	return lipgloss.NewStyle().
+		Foreground(lipgloss.Color(styles.AccentCyan)).
+		Bold(true).
+		Render(status)
+}
+
+// formatTime formats a duration as MM:SS or HH:MM:SS
+func formatTime(d time.Duration) string {
+	totalSeconds := int(d.Seconds())
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds % 3600) / 60
+	seconds := totalSeconds % 60
+
+	if hours > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, seconds)
+	}
+	return fmt.Sprintf("%d:%02d", minutes, seconds)
 }
 
 // renderRightSection renders the right section of the status bar with enhanced visuals.
@@ -225,6 +289,26 @@ func (s *StatusBarComponent) SetMessage(message string) {
 // ClearMessage clears the temporary message.
 func (s *StatusBarComponent) ClearMessage() {
 	s.Message = ""
+}
+
+// SetAudioPlayback sets the audio playback status.
+func (s *StatusBarComponent) SetAudioPlayback(filename string, position, duration time.Duration, state media.PlaybackState, speed float64) {
+	s.AudioPlaying = true
+	s.AudioFilename = filename
+	s.AudioPosition = position
+	s.AudioDuration = duration
+	s.AudioState = state
+	s.AudioSpeed = speed
+}
+
+// ClearAudioPlayback clears the audio playback status.
+func (s *StatusBarComponent) ClearAudioPlayback() {
+	s.AudioPlaying = false
+	s.AudioFilename = ""
+	s.AudioPosition = 0
+	s.AudioDuration = 0
+	s.AudioState = media.StateStopped
+	s.AudioSpeed = 1.0
 }
 
 // getSeparator returns a styled separator for the status bar.

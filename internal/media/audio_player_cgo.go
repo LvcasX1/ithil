@@ -34,6 +34,7 @@ type AudioPlayer struct {
 	streamer        beep.StreamSeekCloser
 	ctrl            *beep.Ctrl
 	volume          *effects.Volume
+	resampler       *beep.Resampler
 	format          beep.Format
 	filePath        string
 	duration        time.Duration
@@ -42,6 +43,7 @@ type AudioPlayer struct {
 	position        time.Duration
 	ticker          *time.Ticker
 	stopTicker      chan bool
+	speed           float64 // Playback speed (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x)
 }
 
 // NewAudioPlayer creates a new audio player instance.
@@ -49,6 +51,7 @@ func NewAudioPlayer() *AudioPlayer {
 	return &AudioPlayer{
 		state:      StateStopped,
 		stopTicker: make(chan bool),
+		speed:      1.0, // Default speed: 1x
 	}
 }
 
@@ -111,8 +114,11 @@ func (p *AudioPlayer) LoadFile(filePath string) error {
 	// Calculate duration
 	duration := format.SampleRate.D(streamer.Len())
 
+	// Create resampler for speed control (default 1.0x speed)
+	resampler := beep.Resample(4, format.SampleRate, format.SampleRate, streamer)
+
 	// Create control wrapper for pause/resume
-	ctrl := &beep.Ctrl{Streamer: streamer, Paused: false}
+	ctrl := &beep.Ctrl{Streamer: resampler, Paused: false}
 
 	// Create volume control (default: 0 = 100%)
 	volume := &effects.Volume{
@@ -126,6 +132,7 @@ func (p *AudioPlayer) LoadFile(filePath string) error {
 	p.streamer = streamer
 	p.ctrl = ctrl
 	p.volume = volume
+	p.resampler = resampler
 	p.format = format
 	p.filePath = filePath
 	p.duration = duration
@@ -373,6 +380,99 @@ func (p *AudioPlayer) GetFilePath() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.filePath
+}
+
+// GetSpeed returns the current playback speed.
+func (p *AudioPlayer) GetSpeed() float64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.speed
+}
+
+// SetSpeed sets the playback speed.
+// Valid speeds: 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x
+func (p *AudioPlayer) SetSpeed(speed float64) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.streamer == nil {
+		return fmt.Errorf("no audio file loaded")
+	}
+
+	// Clamp speed to reasonable values
+	if speed < 0.5 {
+		speed = 0.5
+	}
+	if speed > 2.0 {
+		speed = 2.0
+	}
+
+	p.speed = speed
+
+	// Update resampler with new speed
+	// New sample rate = original rate * speed (higher speed = higher sample rate = faster playback)
+	newSampleRate := beep.SampleRate(float64(p.format.SampleRate) * speed)
+
+	speaker.Lock()
+	// Create new resampler with updated speed
+	p.resampler = beep.Resample(4, p.format.SampleRate, newSampleRate, p.streamer)
+	// Update control streamer
+	p.ctrl.Streamer = p.resampler
+	speaker.Unlock()
+
+	return nil
+}
+
+// SpeedUp increases playback speed to the next preset level.
+func (p *AudioPlayer) SpeedUp() error {
+	p.mu.RLock()
+	currentSpeed := p.speed
+	p.mu.RUnlock()
+
+	// Speed presets: 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x
+	var nextSpeed float64
+	switch {
+	case currentSpeed < 0.75:
+		nextSpeed = 0.75
+	case currentSpeed < 1.0:
+		nextSpeed = 1.0
+	case currentSpeed < 1.25:
+		nextSpeed = 1.25
+	case currentSpeed < 1.5:
+		nextSpeed = 1.5
+	case currentSpeed < 2.0:
+		nextSpeed = 2.0
+	default:
+		nextSpeed = 2.0 // Already at max
+	}
+
+	return p.SetSpeed(nextSpeed)
+}
+
+// SpeedDown decreases playback speed to the next preset level.
+func (p *AudioPlayer) SpeedDown() error {
+	p.mu.RLock()
+	currentSpeed := p.speed
+	p.mu.RUnlock()
+
+	// Speed presets: 0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x
+	var nextSpeed float64
+	switch {
+	case currentSpeed > 1.5:
+		nextSpeed = 1.5
+	case currentSpeed > 1.25:
+		nextSpeed = 1.25
+	case currentSpeed > 1.0:
+		nextSpeed = 1.0
+	case currentSpeed > 0.75:
+		nextSpeed = 0.75
+	case currentSpeed > 0.5:
+		nextSpeed = 0.5
+	default:
+		nextSpeed = 0.5 // Already at min
+	}
+
+	return p.SetSpeed(nextSpeed)
 }
 
 // Close cleans up resources used by the audio player.
