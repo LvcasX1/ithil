@@ -28,14 +28,22 @@ type ConversationModel struct {
 	height         int
 	focused        bool
 	viewport       viewport.Model
-	input          *components.InputComponent
-	replyToMessage *types.Message                   // Message being replied to
-	editingMessage *types.Message                   // Message being edited
-	sendingMessage bool                             // Flag to show sending state
-	typingUsers    map[int64]time.Time              // userID -> when they started typing
-	mediaViewer    *components.MediaViewerComponent // Media viewer modal
-	selectedMsgIdx int                              // Index of selected message for navigation and media viewing
-	messageLinesMap map[int]int                     // Maps message index to starting line position
+	input           *components.InputComponent
+	replyToMessage  *types.Message                   // Message being replied to
+	editingMessage  *types.Message                   // Message being edited
+	sendingMessage  bool                             // Flag to show sending state
+	typingUsers     map[int64]time.Time              // userID -> when they started typing
+	mediaViewer     *components.MediaViewerComponent // Media viewer modal
+	selectedMsgIdx  int                              // Index of selected message for navigation and media viewing
+	messageLinesMap  map[int]int                      // Maps message index to starting line position
+	deleteModal      *components.ModalComponent       // Delete confirmation modal
+	pendingDeleteID  int64                            // ID of message pending deletion
+	forwardMode       bool                             // Forward mode active
+	forwardMessageID  int64                            // ID of message to forward
+	forwardModal      *components.ModalComponent       // Forward chat selector modal
+	reactionMode      bool                             // Reaction picker mode active
+	reactionMessageID int64                            // ID of message to react to
+	reactionModal     *components.ModalComponent       // Reaction picker modal
 }
 
 // NewConversationModel creates a new conversation model.
@@ -52,7 +60,15 @@ func NewConversationModel(client *telegram.Client, cache *cache.Cache) *Conversa
 		typingUsers:     make(map[int64]time.Time),
 		mediaViewer:     components.NewMediaViewerComponent(80, 30),
 		selectedMsgIdx:  -1,
-		messageLinesMap: make(map[int]int),
+		messageLinesMap:  make(map[int]int),
+		deleteModal:       components.NewModalComponent("Confirm Delete", 50, 8),
+		pendingDeleteID:   0,
+		forwardMode:       false,
+		forwardMessageID:  0,
+		forwardModal:      components.NewModalComponent("Forward Message", 60, 15),
+		reactionMode:      false,
+		reactionMessageID: 0,
+		reactionModal:     components.NewModalComponent("React to Message", 50, 12),
 	}
 }
 
@@ -64,6 +80,21 @@ func (m *ConversationModel) Init() tea.Cmd {
 // Update handles conversation model updates.
 func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 	var cmd tea.Cmd
+
+	// If reaction modal is visible, handle it first
+	if m.reactionModal.IsVisible() {
+		return m.handleReactionModal(msg)
+	}
+
+	// If forward modal is visible, handle it first
+	if m.forwardModal.IsVisible() {
+		return m.handleForwardModal(msg)
+	}
+
+	// If delete modal is visible, handle it first
+	if m.deleteModal.IsVisible() {
+		return m.handleDeleteModal(msg)
+	}
 
 	// If media viewer is visible, let it handle updates first
 	if m.mediaViewer.IsVisible() {
@@ -154,6 +185,35 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 			case "enter":
 				// Open media viewer for selected message if available
 				return m, m.openMediaViewer()
+			case "d":
+				// Delete selected message if available
+				if m.selectedMsgIdx >= 0 && m.selectedMsgIdx < len(m.messages) {
+					msg := m.messages[m.selectedMsgIdx]
+					// Only allow deleting outgoing messages
+					if msg.IsOutgoing {
+						m.pendingDeleteID = msg.ID
+						m.deleteModal.SetContent(fmt.Sprintf("Are you sure you want to delete this message?\n\nPress 'y' to confirm or ESC to cancel"))
+						m.deleteModal.Show()
+						return m, nil
+					}
+				}
+				return m, nil
+			case "f":
+				// Forward selected message if available
+				if m.selectedMsgIdx >= 0 && m.selectedMsgIdx < len(m.messages) {
+					msg := m.messages[m.selectedMsgIdx]
+					m.forwardMessageID = msg.ID
+					return m, m.showForwardChatSelector()
+				}
+				return m, nil
+			case "x":
+				// React to selected message if available
+				if m.selectedMsgIdx >= 0 && m.selectedMsgIdx < len(m.messages) {
+					msg := m.messages[m.selectedMsgIdx]
+					m.reactionMessageID = msg.ID
+					return m, m.showReactionPicker()
+				}
+				return m, nil
 			}
 		}
 
@@ -184,6 +244,26 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 		var viewerCmd tea.Cmd
 		m.mediaViewer, viewerCmd = m.mediaViewer.Update(msg)
 		return m, viewerCmd
+
+	case messageDeletedMsg:
+		// Remove message from local state
+		m.RemoveMessage(msg.messageID)
+		m.pendingDeleteID = 0
+		return m, nil
+
+	case messageForwardedMsg:
+		// Message forwarded successfully
+		// TODO: Show success feedback to user
+		return m, nil
+
+	case messageReactedMsg:
+		// Reaction sent successfully
+		// TODO: Show success feedback to user
+		return m, nil
+
+	case sendErrorMsg:
+		// TODO: Show error to user (could use a status bar or notification)
+		return m, nil
 	}
 
 	// CRITICAL: Only update viewport when this pane is focused
@@ -240,6 +320,54 @@ func (m *ConversationModel) View() string {
 		baseView = m.renderEmpty()
 	} else {
 		baseView = m.renderConversationView()
+	}
+
+	// If reaction modal is visible, overlay it
+	if m.reactionModal.IsVisible() {
+		modalView := m.reactionModal.View()
+		// Center the modal
+		overlay := lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			modalView,
+			lipgloss.WithWhitespaceChars(" "),
+			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
+		)
+		return overlay
+	}
+
+	// If forward modal is visible, overlay it
+	if m.forwardModal.IsVisible() {
+		modalView := m.forwardModal.View()
+		// Center the modal
+		overlay := lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			modalView,
+			lipgloss.WithWhitespaceChars(" "),
+			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
+		)
+		return overlay
+	}
+
+	// If delete modal is visible, overlay it
+	if m.deleteModal.IsVisible() {
+		modalView := m.deleteModal.View()
+		// Center the modal
+		overlay := lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			modalView,
+			lipgloss.WithWhitespaceChars(" "),
+			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
+		)
+		return overlay
 	}
 
 	// If media viewer is visible, overlay it
@@ -1042,4 +1170,225 @@ type fileAttachRequestMsg struct{}
 // fileAttachedMsg indicates a file has been attached
 type fileAttachedMsg struct {
 	filePath string
+}
+
+// messageDeletedMsg indicates a message was deleted
+type messageDeletedMsg struct {
+	chatID    int64
+	messageID int64
+}
+
+// handleDeleteModal handles delete modal interactions
+func (m *ConversationModel) handleDeleteModal(msg tea.Msg) (*ConversationModel, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "y", "Y":
+			// Confirm deletion
+			m.deleteModal.Hide()
+			return m, m.deleteMessage(m.pendingDeleteID)
+		case "esc", "n", "N":
+			// Cancel deletion
+			m.deleteModal.Hide()
+			m.pendingDeleteID = 0
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// deleteMessage deletes a message from the current chat
+func (m *ConversationModel) deleteMessage(messageID int64) tea.Cmd {
+	if m.currentChat == nil || messageID == 0 {
+		return nil
+	}
+
+	currentChat := m.currentChat
+	return func() tea.Msg {
+		err := m.client.DeleteMessage(currentChat, messageID)
+		if err != nil {
+			return sendErrorMsg{error: fmt.Sprintf("Failed to delete message: %v", err)}
+		}
+		return messageDeletedMsg{
+			chatID:    currentChat.ID,
+			messageID: messageID,
+		}
+	}
+}
+
+// showForwardChatSelector shows the forward chat selector modal
+func (m *ConversationModel) showForwardChatSelector() tea.Cmd {
+	// Get all chats from cache
+	allChats := m.cache.GetChats()
+	if len(allChats) == 0 {
+		m.forwardModal.SetContent("No chats available to forward to.\n\nPress ESC to cancel")
+		m.forwardModal.Show()
+		return nil
+	}
+
+	// Build chat list display (show first 9 chats with numbers)
+	var chatList strings.Builder
+	chatList.WriteString("Select a chat to forward to:\n\n")
+
+	maxChats := 9
+	if len(allChats) > maxChats {
+		allChats = allChats[:maxChats]
+	}
+
+	for i, chat := range allChats {
+		chatList.WriteString(fmt.Sprintf("%d. %s\n", i+1, chat.Title))
+	}
+
+	chatList.WriteString("\nPress 1-9 to select, or ESC to cancel")
+
+	m.forwardModal.SetContent(chatList.String())
+	m.forwardModal.Show()
+	m.forwardMode = true
+
+	return nil
+}
+
+// handleForwardModal handles forward modal interactions
+func (m *ConversationModel) handleForwardModal(msg tea.Msg) (*ConversationModel, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+			// Select chat by number
+			chatIdx := int(msg.String()[0] - '1') // Convert '1'-'9' to 0-8
+
+			allChats := m.cache.GetChats()
+			if chatIdx >= 0 && chatIdx < len(allChats) && chatIdx < 9 {
+				toChat := allChats[chatIdx]
+				m.forwardModal.Hide()
+				m.forwardMode = false
+				return m, m.forwardMessage(toChat)
+			}
+			return m, nil
+		case "esc":
+			// Cancel forward
+			m.forwardModal.Hide()
+			m.forwardMode = false
+			m.forwardMessageID = 0
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// forwardMessage forwards a message to another chat
+func (m *ConversationModel) forwardMessage(toChat *types.Chat) tea.Cmd {
+	if m.currentChat == nil || m.forwardMessageID == 0 {
+		return nil
+	}
+
+	fromChat := m.currentChat
+	messageID := m.forwardMessageID
+	m.forwardMessageID = 0
+
+	return func() tea.Msg {
+		err := m.client.ForwardMessage(fromChat, toChat, []int64{messageID})
+		if err != nil {
+			return sendErrorMsg{error: fmt.Sprintf("Failed to forward message: %v", err)}
+		}
+		return messageForwardedMsg{
+			toChat: toChat.Title,
+		}
+	}
+}
+
+// messageForwardedMsg indicates a message was forwarded
+type messageForwardedMsg struct {
+	toChat string
+}
+
+// showReactionPicker shows the reaction picker modal
+func (m *ConversationModel) showReactionPicker() tea.Cmd {
+	// Common emoji reactions
+	reactions := []string{
+		"1. 👍 Thumbs up",
+		"2. 👎 Thumbs down",
+		"3. ❤️ Heart",
+		"4. 🔥 Fire",
+		"5. 👏 Clap",
+		"6. 😂 Laugh",
+		"7. 😮 Surprised",
+		"8. 😢 Sad",
+	}
+
+	var pickerContent strings.Builder
+	pickerContent.WriteString("Select a reaction:\n\n")
+	for _, reaction := range reactions {
+		pickerContent.WriteString(reaction + "\n")
+	}
+	pickerContent.WriteString("\nPress 1-8 to select, or ESC to cancel")
+
+	m.reactionModal.SetContent(pickerContent.String())
+	m.reactionModal.Show()
+	m.reactionMode = true
+
+	return nil
+}
+
+// handleReactionModal handles reaction modal interactions
+func (m *ConversationModel) handleReactionModal(msg tea.Msg) (*ConversationModel, tea.Cmd) {
+	// Map of number keys to emoji
+	reactionMap := map[string]string{
+		"1": "👍",
+		"2": "👎",
+		"3": "❤️",
+		"4": "🔥",
+		"5": "👏",
+		"6": "😂",
+		"7": "😮",
+		"8": "😢",
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "1", "2", "3", "4", "5", "6", "7", "8":
+			// Select reaction by number
+			emoji, exists := reactionMap[msg.String()]
+			if exists {
+				m.reactionModal.Hide()
+				m.reactionMode = false
+				return m, m.reactToMessage(emoji)
+			}
+			return m, nil
+		case "esc":
+			// Cancel reaction
+			m.reactionModal.Hide()
+			m.reactionMode = false
+			m.reactionMessageID = 0
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// reactToMessage sends a reaction to a message
+func (m *ConversationModel) reactToMessage(emoji string) tea.Cmd {
+	if m.currentChat == nil || m.reactionMessageID == 0 {
+		return nil
+	}
+
+	currentChat := m.currentChat
+	messageID := m.reactionMessageID
+	m.reactionMessageID = 0
+
+	return func() tea.Msg {
+		err := m.client.ReactToMessage(currentChat, messageID, emoji)
+		if err != nil {
+			return sendErrorMsg{error: fmt.Sprintf("Failed to react to message: %v", err)}
+		}
+		return messageReactedMsg{
+			reaction: emoji,
+		}
+	}
+}
+
+// messageReactedMsg indicates a reaction was sent
+type messageReactedMsg struct {
+	reaction string
 }

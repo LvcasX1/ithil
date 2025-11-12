@@ -136,14 +136,6 @@ func (m *MediaManager) DownloadPhoto(ctx context.Context, photo *tg.Photo, chatI
 		"height", bestSize.H,
 		"bytes", bestSize.Size)
 
-	// DEBUG: Log before download
-	m.client.logger.Info("About to download photo",
-		"photoID", photo.ID,
-		"sizeType", bestSize.Type,
-		"width", bestSize.W,
-		"height", bestSize.H,
-		"expectedSize", bestSize.Size)
-
 	// Create file location from photo
 	location := &tg.InputPhotoFileLocation{
 		ID:            photo.ID,
@@ -166,7 +158,6 @@ func (m *MediaManager) DownloadPhoto(ctx context.Context, photo *tg.Photo, chatI
 		return "", fmt.Errorf("failed to download photo: %w", err)
 	}
 
-	// DEBUG: Log after download with actual file size
 	fileInfo, err := os.Stat(localPath)
 	if err == nil {
 		m.client.logger.Info("Downloaded photo to file",
