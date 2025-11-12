@@ -89,15 +89,6 @@ func (r *KittyRenderer) RenderImage(img interface{}) (string, error) {
 	// Build Kitty escape sequence
 	var result string
 
-	// Get image dimensions for proper positioning
-	bounds := imgData.Bounds()
-	imgHeight := bounds.Dy()
-
-	// Calculate number of rows the image will occupy
-	// Use actual character cell dimensions if available, otherwise estimate
-	cellHeight := 20 // pixels per character cell height
-	rows := (imgHeight + cellHeight - 1) / cellHeight
-
 	for i, chunk := range chunks {
 		if i == 0 {
 			// First chunk: transmit with metadata
@@ -120,11 +111,9 @@ func (r *KittyRenderer) RenderImage(img interface{}) (string, error) {
 		}
 	}
 
-	// Add placeholder newlines to reserve space for the image
-	// This prevents text from overwriting the image
-	for i := 0; i < rows; i++ {
-		result += "\n"
-	}
+	// Note: Kitty protocol handles image positioning automatically.
+	// The Bubbletea TUI framework manages layout, so no manual newlines are needed.
+	// Adding newlines here would break the viewport and shift the UI.
 
 	return result, nil
 }
@@ -162,12 +151,8 @@ func (r *KittyRenderer) RenderImageWithID(filePath string, imageID uint32) (stri
 	// Format: \x1b_Ga=T,f=100,t=d,i=<id>,<data>;\x1b\
 	result := fmt.Sprintf("\x1b_Ga=T,f=100,t=d,i=%d;%s\x1b\\", imageID, encodedData)
 
-	// Add placeholder newlines
-	bounds := img.Bounds()
-	rows := (bounds.Dy() + 19) / 20 // 20 pixels per row
-	for i := 0; i < rows; i++ {
-		result += "\n"
-	}
+	// Note: Kitty protocol handles image positioning automatically.
+	// The Bubbletea TUI framework manages layout, so no manual newlines are needed.
 
 	return result, nil
 }
