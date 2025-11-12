@@ -92,12 +92,60 @@ The application uses the official Telegram MTProto protocol via gotd/td and impl
 
 ## Installation
 
-### Prerequisites
+### Package Managers
 
-- Go 1.23 or later
-- Telegram API credentials (see [Getting API Credentials](#getting-api-credentials))
+#### Homebrew (macOS/Linux)
+```bash
+brew tap lvcasx1/tap
+brew install ithil
+```
+
+#### Scoop (Windows)
+```bash
+scoop bucket add lvcasx1 https://github.com/lvcasx1/scoop-bucket
+scoop install ithil
+```
+
+#### Chocolatey (Windows)
+```bash
+choco install ithil
+```
+
+#### AUR (Arch Linux)
+```bash
+yay -S ithil-bin
+# or
+paru -S ithil-bin
+```
+
+#### DEB (Debian/Ubuntu)
+```bash
+# Download the .deb file from releases
+wget https://github.com/lvcasx1/ithil/releases/latest/download/ithil_*_Linux_x86_64.deb
+sudo dpkg -i ithil_*_Linux_x86_64.deb
+```
+
+#### RPM (Fedora/RHEL/CentOS)
+```bash
+# Download the .rpm file from releases
+wget https://github.com/lvcasx1/ithil/releases/latest/download/ithil_*_Linux_x86_64.rpm
+sudo rpm -i ithil_*_Linux_x86_64.rpm
+```
+
+#### APK (Alpine Linux)
+```bash
+# Download the .apk file from releases
+wget https://github.com/lvcasx1/ithil/releases/latest/download/ithil_*_Linux_x86_64.apk
+sudo apk add --allow-untrusted ithil_*_Linux_x86_64.apk
+```
+
+### Direct Download
+
+Download pre-built binaries from the [releases page](https://github.com/lvcasx1/ithil/releases).
 
 ### From Source
+
+**Prerequisites**: Go 1.23 or later
 
 ```bash
 # Clone the repository

@@ -45,3 +45,7 @@ tdlib/
 # Air
 tmp/
 build-errors.log
+
+# GoReleaser
+dist/
+goreleaser.log
