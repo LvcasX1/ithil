@@ -108,6 +108,26 @@ func (p *AudioPlayer) GetFilePath() string {
 	return ""
 }
 
+// GetSpeed returns 1.0 (default speed).
+func (p *AudioPlayer) GetSpeed() float64 {
+	return 1.0
+}
+
+// SetSpeed returns an error indicating audio is not supported without CGO.
+func (p *AudioPlayer) SetSpeed(speed float64) error {
+	return fmt.Errorf("audio playback not supported in this build (requires CGO)")
+}
+
+// SpeedUp returns an error indicating audio is not supported without CGO.
+func (p *AudioPlayer) SpeedUp() error {
+	return fmt.Errorf("audio playback not supported in this build (requires CGO)")
+}
+
+// SpeedDown returns an error indicating audio is not supported without CGO.
+func (p *AudioPlayer) SpeedDown() error {
+	return fmt.Errorf("audio playback not supported in this build (requires CGO)")
+}
+
 // Close returns nil (no-op).
 func (p *AudioPlayer) Close() error {
 	return nil
