@@ -52,6 +52,8 @@ jobs:
 
     - name: Run tests
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+      env:
+        CGO_ENABLED: 0
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -77,6 +79,8 @@ jobs:
 
     - name: Build
       run: go build -v ./cmd/ithil
+      env:
+        CGO_ENABLED: 0
 
     - name: Build for multiple platforms
       run: |
@@ -84,3 +88,5 @@ jobs:
         GOOS=darwin GOARCH=amd64 go build -o bin/ithil-darwin-amd64 ./cmd/ithil
         GOOS=darwin GOARCH=arm64 go build -o bin/ithil-darwin-arm64 ./cmd/ithil
         GOOS=windows GOARCH=amd64 go build -o bin/ithil-windows-amd64.exe ./cmd/ithil
+      env:
+        CGO_ENABLED: 0
