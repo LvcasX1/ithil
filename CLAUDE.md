@@ -131,10 +131,13 @@ UpdateHandler (internal/telegram/updates.go) → Cache (internal/cache/cache.go)
 **Critical**: The cache must be set on the client via `client.SetCache()` before starting, so the update handler can cache users during update processing.
 
 #### 5. Media System (`internal/media/`)
-- **`audio_player.go`**: Beep-based audio playback for voice/audio messages
+- **`protocol_detector.go`**: Automatic graphics protocol detection (Kitty, Sixel, Unicode, ASCII)
+- **`kitty_renderer.go`**: Kitty graphics protocol implementation (pixel-perfect rendering)
+- **`sixel_renderer.go`**: Sixel graphics protocol implementation (256-color rendering)
+- **`mosaic_renderer.go`**: Unicode half-block image rendering (true color)
+- **`image_renderer.go`**: ASCII art image rendering (fallback)
+- **`audio_player_cgo.go`**: Beep-based audio playback for voice/audio messages
 - **`audio_renderer.go`**: Waveform visualization and playback UI
-- **`image_renderer.go`**: Kitty/Sixel protocol image rendering
-- **`mosaic_renderer.go`**: Unicode half-block image rendering
 
 **Critical**: Audio playback uses Beep library with goroutines. Must properly clean up resources when stopping playback to avoid memory leaks.
 
@@ -335,11 +338,15 @@ case *tg.MessagesChannelMessages:
 
 ## Current Development Phase
 
-**Phase 3 (Rich Features)** - In Progress:
-- Media download/display ✅ (partially done)
-- Message reactions ❌ (not started)
-- Message forwarding ❌ (stub only)
-- Message deletion ❌ (stub only)
+**Phase 3 (Rich Features)** - Completed:
+- ✅ Media download/display with automatic protocol detection
+- ✅ Kitty graphics protocol support (pixel-perfect rendering)
+- ✅ Sixel graphics protocol support (256-color rendering)
+- ✅ Unicode mosaic rendering with true color
+- ✅ ASCII art fallback for maximum compatibility
+- ❌ Message reactions (not started)
+- ❌ Message forwarding (stub only)
+- ❌ Message deletion (stub only)
 
 **Phase 4 (Advanced Features)** - Completed:
 - ✅ Voice messages with audio playback (Beep library)
