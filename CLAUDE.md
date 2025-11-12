@@ -344,6 +344,11 @@ case *tg.MessagesChannelMessages:
 - ✅ Sixel graphics protocol support (256-color rendering)
 - ✅ Unicode mosaic rendering with true color
 - ✅ ASCII art fallback for maximum compatibility
+- ✅ Fullscreen image viewer with comfortable margins
+- ✅ Optimistic message sending (instant display)
+- ✅ Inline thumbnail optimization (30-50×12 chars)
+- ✅ Image quality preservation (no upscaling of small images)
+- ✅ Emoji alignment fix in chat headers
 - ❌ Message reactions (not started)
 - ❌ Message forwarding (stub only)
 - ❌ Message deletion (stub only)
@@ -359,6 +364,13 @@ case *tg.MessagesChannelMessages:
 
 **Phase 5 (Polish)** - Planned:
 - Notifications, search, multiple themes, performance optimizations
+
+**Next Steps:**
+With image handling now complete, the natural next features would be:
+- Message reactions (add/view reactions to messages)
+- Message forwarding (forward messages to other chats)
+- Message deletion (delete own messages)
+- Search functionality (search messages in current chat or globally)
 
 ## Important Files to Read First
 
