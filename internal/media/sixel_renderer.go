@@ -68,8 +68,16 @@ func (r *SixelRenderer) RenderImage(img interface{}) (string, error) {
 	maxPixelWidth := r.maxWidth * 10
 	maxPixelHeight := r.maxHeight * 20
 
-	// Resize while maintaining aspect ratio
-	imgData = imaging.Fit(imgData, maxPixelWidth, maxPixelHeight, imaging.Lanczos)
+	// Get original image dimensions
+	bounds := imgData.Bounds()
+	originalWidth := bounds.Dx()
+	originalHeight := bounds.Dy()
+
+	// Only scale DOWN if image is larger than available space, never scale UP
+	// This preserves original quality for small images like thumbnails
+	if originalWidth > maxPixelWidth || originalHeight > maxPixelHeight {
+		imgData = imaging.Fit(imgData, maxPixelWidth, maxPixelHeight, imaging.Lanczos)
+	}
 
 	// Encode image to Sixel format
 	var buf bytes.Buffer
@@ -102,10 +110,17 @@ func (r *SixelRenderer) RenderImageWithDithering(filePath string, dither bool) (
 		return "", fmt.Errorf("failed to decode image: %w", err)
 	}
 
-	// Resize image
+	// Resize image - only scale DOWN, never UP
 	maxPixelWidth := r.maxWidth * 10
 	maxPixelHeight := r.maxHeight * 20
-	img = imaging.Fit(img, maxPixelWidth, maxPixelHeight, imaging.Lanczos)
+
+	bounds := img.Bounds()
+	originalWidth := bounds.Dx()
+	originalHeight := bounds.Dy()
+
+	if originalWidth > maxPixelWidth || originalHeight > maxPixelHeight {
+		img = imaging.Fit(img, maxPixelWidth, maxPixelHeight, imaging.Lanczos)
+	}
 
 	// Encode with specified dithering
 	var buf bytes.Buffer

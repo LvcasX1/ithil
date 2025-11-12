@@ -411,6 +411,12 @@ func (m *MainModel) View() string {
 		return m.settings.View()
 	}
 
+	// If media viewer is in fullscreen mode, short-circuit normal rendering
+	// and return ONLY the fullscreen view (bypassing all Lipgloss layout)
+	if m.conversation.IsMediaViewerFullscreen() {
+		return m.conversation.GetMediaViewerFullscreenView()
+	}
+
 	// Show main UI with three panes
 	return m.renderMainUI()
 }

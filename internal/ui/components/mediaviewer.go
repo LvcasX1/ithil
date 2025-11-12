@@ -144,21 +144,31 @@ func (m *MediaViewerComponent) View() string {
 		return ""
 	}
 
-	// For Sixel/Kitty protocols, we need different styling to prevent UI shifts
-	// These protocols render pixel graphics that take up vertical space in the terminal
-	usePixelProtocol := m.detectedProtocol == media.ProtocolKitty || m.detectedProtocol == media.ProtocolSixel
+	// For pixel protocols displaying images, use fullscreen mode
+	// This bypasses Lipgloss entirely to avoid cursor movement issues
+	useFullscreen := (m.detectedProtocol == media.ProtocolKitty || m.detectedProtocol == media.ProtocolSixel) &&
+		m.message != nil &&
+		m.message.Content.Type == types.MessageTypePhoto &&
+		!m.downloading &&
+		m.renderError == nil
 
-	// Create modal style - DON'T use MaxHeight for pixel protocols
+	if useFullscreen {
+		return m.ViewFullscreen()
+	}
+
+	// For all other content, use normal Lipgloss modal
+	return m.ViewModal()
+}
+
+// ViewModal renders the media viewer as a Lipgloss modal (for audio, video, docs, and low-res images).
+func (m *MediaViewerComponent) ViewModal() string {
+	// Create modal style
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(styles.AccentCyan)).
 		Padding(1, 2).
-		Width(m.width)
-
-	// Only set MaxHeight for text-based protocols (Mosaic/ASCII)
-	if !usePixelProtocol {
-		modalStyle = modalStyle.MaxHeight(m.height)
-	}
+		Width(m.width).
+		MaxHeight(m.height)
 
 	// Build modal content
 	var contentBuilder strings.Builder
@@ -205,6 +215,39 @@ func (m *MediaViewerComponent) View() string {
 	contentBuilder.WriteString(hintStyle.Render("Press ESC or Q to close"))
 
 	return modalStyle.Render(contentBuilder.String())
+}
+
+// ViewFullscreen renders the image in fullscreen mode.
+// This bypasses Lipgloss entirely to avoid cursor movement issues with pixel protocols.
+// Renders image with comfortable margins from the terminal edges.
+func (m *MediaViewerComponent) ViewFullscreen() string {
+	var result strings.Builder
+
+	// Clear screen and move cursor to top-left
+	result.WriteString("\x1b[2J\x1b[H")
+
+	// Add top margin (2 blank lines)
+	result.WriteString("\n\n")
+
+	// Add left margin (5 spaces) before the image
+	result.WriteString("     ")
+
+	// Render the image content
+	if m.content != "" {
+		result.WriteString(m.content)
+	}
+
+	// Add text overlay at bottom
+	result.WriteString("\n\n")
+	overlayText := "Press ESC or Q to return to chat"
+	// Center the text
+	padding := (m.width - len(overlayText)) / 2
+	if padding > 0 {
+		result.WriteString(strings.Repeat(" ", padding))
+	}
+	result.WriteString(overlayText)
+
+	return result.String()
 }
 
 // ShowMedia shows the media viewer with a specific message.
@@ -306,9 +349,29 @@ func (m *MediaViewerComponent) renderMedia() {
 	}
 
 	var err error
-	// Maximize content area - account for border (4 chars), padding (4 chars), title/footer (6 lines)
-	contentWidth := m.width - 8
-	contentHeight := m.height - 12
+	var contentWidth, contentHeight int
+
+	// Determine if we'll use fullscreen mode for this media
+	useFullscreen := (m.detectedProtocol == media.ProtocolKitty || m.detectedProtocol == media.ProtocolSixel) &&
+		m.message.Content.Type == types.MessageTypePhoto
+
+	if useFullscreen {
+		// FULLSCREEN MODE: Account for margins
+		// Left margin: 5 spaces
+		// Top margin: 2 lines
+		// Bottom overlay: 3 lines
+		contentWidth = m.width - 5      // Reserve 5 chars for left margin
+		contentHeight = m.height - 5    // Reserve 2 lines for top margin + 3 lines for overlay text
+	} else {
+		// MODAL MODE: Account for border and padding
+		// Border takes: 2 chars left + 2 chars right = 4 chars
+		// Padding takes: 2 chars left + 2 chars right = 4 chars
+		// Title takes: 1 line + 2 blank lines = 3 lines
+		// Footer takes: 2 blank lines + 1 line = 3 lines
+		// Border takes: 2 lines (top + bottom)
+		contentWidth = m.width - 4  // Minimal border/padding
+		contentHeight = m.height - 6
+	}
 
 	switch m.message.Content.Type {
 	case types.MessageTypePhoto:
@@ -501,8 +564,27 @@ func (m *MediaViewerComponent) stopUIRefresh() {
 	// No-op: ticker is managed by Bubble Tea commands
 }
 
+// IsFullscreenMode returns true if the media viewer should use fullscreen mode.
+// Fullscreen mode is used for Kitty/Sixel images to provide high-quality rendering
+// without Lipgloss layout interference.
+func (m *MediaViewerComponent) IsFullscreenMode() bool {
+	if !m.visible {
+		return false
+	}
+
+	// Fullscreen mode only for pixel protocols with photos
+	return (m.detectedProtocol == media.ProtocolKitty || m.detectedProtocol == media.ProtocolSixel) &&
+		m.message != nil &&
+		m.message.Content.Type == types.MessageTypePhoto &&
+		!m.downloading &&
+		m.renderError == nil
+}
+
 // renderImageWithBestProtocol renders an image using the best available graphics protocol.
 // It automatically selects between Kitty, Sixel, Unicode Mosaic, or ASCII based on terminal capabilities.
+//
+// For Kitty/Sixel protocols, this will render at full quality for fullscreen mode.
+// The fullscreen mode bypasses Lipgloss entirely, avoiding cursor movement issues.
 func (m *MediaViewerComponent) renderImageWithBestProtocol(filePath string, width, height int) (string, error) {
 	// Update dimensions for all renderers
 	m.kittyRenderer.SetDimensions(width, height)
@@ -510,32 +592,22 @@ func (m *MediaViewerComponent) renderImageWithBestProtocol(filePath string, widt
 	m.mosaicRenderer.SetDimensions(width, height)
 	m.imageRenderer.SetDimensions(width, height)
 
-	// Render using the detected protocol
+	// Use the actual detected protocol to render at highest quality
 	switch m.detectedProtocol {
 	case media.ProtocolKitty:
-		content, err := m.kittyRenderer.RenderImageFile(filePath)
-		if err != nil {
-			// Fallback to Sixel on error
-			if m.protocolDetector.DetectProtocol() >= media.ProtocolSixel {
-				return m.sixelRenderer.RenderImageFile(filePath)
-			}
-			// Fallback to Unicode Mosaic
-			return m.mosaicRenderer.RenderImageFile(filePath)
-		}
-		return content, nil
+		// Use Kitty renderer for full quality pixel-based rendering
+		return m.kittyRenderer.RenderImageFile(filePath)
 
 	case media.ProtocolSixel:
-		content, err := m.sixelRenderer.RenderImageFile(filePath)
-		if err != nil {
-			// Fallback to Unicode Mosaic on error
-			return m.mosaicRenderer.RenderImageFile(filePath)
-		}
-		return content, nil
+		// Use Sixel renderer for full quality pixel-based rendering
+		return m.sixelRenderer.RenderImageFile(filePath)
 
 	case media.ProtocolUnicodeMosaic:
+		// Use Unicode Mosaic for text-based rendering
 		return m.mosaicRenderer.RenderImageFile(filePath)
 
 	case media.ProtocolASCII:
+		// Use ASCII for basic text-based rendering
 		return m.imageRenderer.RenderImageFile(filePath)
 
 	default:
