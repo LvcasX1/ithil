@@ -177,7 +177,6 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 						if m.messages[i].IsOutgoing {
 							m.SetEditing(m.messages[i])
 							return m, m.input.Focus()
-							break
 						}
 					}
 				}
