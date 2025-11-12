@@ -244,6 +244,15 @@ func (m *ConversationModel) Update(msg tea.Msg) (*ConversationModel, tea.Cmd) {
 		m.mediaViewer, viewerCmd = m.mediaViewer.Update(msg)
 		return m, viewerCmd
 
+	case components.RefreshUIMsg:
+		// Forward refresh messages to media viewer for real-time playback updates
+		if m.mediaViewer.IsVisible() {
+			var viewerCmd tea.Cmd
+			m.mediaViewer, viewerCmd = m.mediaViewer.Update(msg)
+			return m, viewerCmd
+		}
+		return m, nil
+
 	case messageDeletedMsg:
 		// Remove message from local state
 		m.RemoveMessage(msg.messageID)
