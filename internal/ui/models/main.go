@@ -266,11 +266,14 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case messageSentMsg:
-		// DO NOT add message to conversation UI here - it will be added when
-		// the server sends back the UpdateTypeNewMessage update. This prevents
-		// the message from appearing twice in the UI.
-		// We only update the cache here so the message is stored.
+		// Optimistic UI: Add message immediately for instant display
+		// This prevents the delay when server confirmation arrives later
 		m.cache.AddMessage(msg.chatID, msg.message)
+
+		// If this chat is currently open, add message to UI immediately
+		if m.currentChat != nil && m.currentChat.ID == msg.chatID {
+			m.conversation.AddMessage(msg.message)
+		}
 
 		// Update chat last message in cache
 		if chat, exists := m.cache.GetChat(msg.chatID); exists {
@@ -768,23 +771,31 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 		message := update.Message
 		chatID := update.ChatID
 
-		// Update cache
-		m.cache.AddMessage(chatID, message)
+		// Check if message already exists in cache (from optimistic UI)
+		// This prevents duplicate messages when server confirms our sent message
+		existingMsg, exists := m.cache.GetMessage(chatID, message.ID)
 
-		// If this chat is currently open, trigger a message to update the conversation
-		if m.currentChat != nil && m.currentChat.ID == chatID {
-			// Add the message to the conversation UI
-			// This handles both incoming messages (from other users) and outgoing messages
-			// (sent by us and confirmed by the server)
-			m.conversation.AddMessage(message)
+		if !exists || existingMsg == nil {
+			// New message from another user or confirmed message with ID
+			m.cache.AddMessage(chatID, message)
 
-			// Update sidebar with new message
-			m.sidebar.SetCurrentChat(m.currentChat)
+			// If this chat is currently open, add to UI
+			if m.currentChat != nil && m.currentChat.ID == chatID {
+				m.conversation.AddMessage(message)
 
-			// Return a command that sends a no-op message to trigger re-render
-			cmds = append(cmds, func() tea.Msg {
-				return renderUpdateMsg{}
-			})
+				// Update sidebar with new message
+				m.sidebar.SetCurrentChat(m.currentChat)
+
+				// Return a command that sends a no-op message to trigger re-render
+				cmds = append(cmds, func() tea.Msg {
+					return renderUpdateMsg{}
+				})
+			}
+		} else {
+			// Message already exists (from optimistic UI), just update in cache
+			// This handles server confirmation of our sent message
+			m.cache.AddMessage(chatID, message)
+			// No need to add to UI again - it's already there
 		}
 
 		// Update chat list
