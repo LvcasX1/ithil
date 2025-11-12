@@ -412,8 +412,16 @@ func (c *Client) SendMediaMessage(chat *types.Chat, filePath string, caption str
 	}
 }
 
-// DownloadMedia downloads media from a message to local storage.
+// DownloadMedia downloads media from a message without progress tracking.
+// For progress tracking, use DownloadMediaWithProgress instead.
 func (c *Client) DownloadMedia(message *types.Message) (string, error) {
+	return c.DownloadMediaWithProgress(message, "")
+}
+
+// DownloadMediaWithProgress downloads media from a message with optional progress tracking.
+// If progressKey is non-empty, progress updates can be received by subscribing via
+// mediaManager.SubscribeProgress(progressKey).
+func (c *Client) DownloadMediaWithProgress(message *types.Message, progressKey string) (string, error) {
 	if c.mediaManager == nil {
 		return "", fmt.Errorf("media manager not initialized")
 	}
@@ -469,7 +477,7 @@ func (c *Client) DownloadMedia(message *types.Message) (string, error) {
 			Sizes:         photoSizes, // Use reconstructed sizes
 		}
 
-		localPath, err = c.mediaManager.DownloadPhoto(c.ctx, photo, message.ChatID)
+		localPath, err = c.mediaManager.DownloadPhoto(c.ctx, photo, message.ChatID, progressKey)
 		if err != nil {
 			return "", fmt.Errorf("failed to download photo: %w", err)
 		}
@@ -490,7 +498,7 @@ func (c *Client) DownloadMedia(message *types.Message) (string, error) {
 			Attributes:    []tg.DocumentAttributeClass{}, // Attributes not needed for download
 		}
 
-		localPath, err = c.mediaManager.DownloadDocument(c.ctx, doc, message.ChatID)
+		localPath, err = c.mediaManager.DownloadDocument(c.ctx, doc, message.ChatID, progressKey)
 		if err != nil {
 			return "", fmt.Errorf("failed to download document: %w", err)
 		}

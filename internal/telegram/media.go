@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/telegram/uploader"
@@ -18,10 +20,12 @@ import (
 
 // MediaManager handles media upload and download operations.
 type MediaManager struct {
-	client     *Client
-	downloader *downloader.Downloader
-	uploader   *uploader.Uploader
-	mediaDir   string
+	client           *Client
+	downloader       *downloader.Downloader
+	uploader         *uploader.Uploader
+	mediaDir         string
+	progressChannels map[string]chan types.DownloadProgress
+	progressMu       sync.RWMutex
 }
 
 // NewMediaManager creates a new media manager.
@@ -32,16 +36,150 @@ func (c *Client) NewMediaManager(mediaDir string) (*MediaManager, error) {
 	}
 
 	return &MediaManager{
-		client:     c,
-		downloader: downloader.NewDownloader(),
-		uploader:   uploader.NewUploader(c.api),
-		mediaDir:   mediaDir,
+		client:           c,
+		downloader:       downloader.NewDownloader(),
+		uploader:         uploader.NewUploader(c.api),
+		mediaDir:         mediaDir,
+		progressChannels: make(map[string]chan types.DownloadProgress),
 	}, nil
 }
 
 // GetMediaDirectory returns the path to the media directory.
 func (m *MediaManager) GetMediaDirectory() string {
 	return m.mediaDir
+}
+
+// SubscribeProgress subscribes to download progress updates for a specific download.
+// The key should be a unique identifier for the download (e.g., message ID or file ID).
+// Returns a channel that will receive progress updates.
+// The caller is responsible for consuming from the channel and calling UnsubscribeProgress when done.
+func (m *MediaManager) SubscribeProgress(key string) <-chan types.DownloadProgress {
+	m.progressMu.Lock()
+	defer m.progressMu.Unlock()
+
+	// Create a buffered channel to prevent blocking on send
+	// Buffer size of 100 should be sufficient for most downloads
+	ch := make(chan types.DownloadProgress, 100)
+	m.progressChannels[key] = ch
+	return ch
+}
+
+// UnsubscribeProgress unsubscribes from download progress updates and closes the channel.
+// Safe to call even if the key doesn't exist.
+func (m *MediaManager) UnsubscribeProgress(key string) {
+	m.progressMu.Lock()
+	defer m.progressMu.Unlock()
+
+	if ch, exists := m.progressChannels[key]; exists {
+		close(ch)
+		delete(m.progressChannels, key)
+	}
+}
+
+// updateProgress sends a progress update to all subscribers of the given key.
+// If no subscribers exist, the update is silently discarded.
+// Non-blocking - if a subscriber's channel is full, the update is skipped for that subscriber.
+func (m *MediaManager) updateProgress(key string, progress types.DownloadProgress) {
+	m.progressMu.RLock()
+	defer m.progressMu.RUnlock()
+
+	if ch, exists := m.progressChannels[key]; exists {
+		// Non-blocking send - skip update if channel is full
+		select {
+		case ch <- progress:
+		default:
+			// Channel full, skip this update
+			m.client.logger.Debug("Progress channel full, skipping update",
+				"key", key,
+				"bytesLoaded", progress.BytesLoaded,
+				"bytesTotal", progress.BytesTotal)
+		}
+	}
+}
+
+// progressWriter wraps an io.Writer and tracks progress for downloads.
+type progressWriter struct {
+	writer         io.Writer
+	bytesTotal     int64
+	bytesWritten   int64
+	key            string
+	mediaManager   *MediaManager
+	startTime      time.Time
+	lastUpdate     time.Time
+	lastReportSize int64
+	minReportBytes int64  // Minimum bytes to write before sending an update (100KB)
+	minReportTime  time.Duration // Minimum time between updates (100ms)
+}
+
+// newProgressWriter creates a new progress writer that tracks download progress.
+func (m *MediaManager) newProgressWriter(writer io.Writer, key string, totalSize int64) *progressWriter {
+	now := time.Now()
+	pw := &progressWriter{
+		writer:         writer,
+		bytesTotal:     totalSize,
+		key:            key,
+		mediaManager:   m,
+		startTime:      now,
+		lastUpdate:     now,
+		minReportBytes: 100 * 1024, // 100KB
+		minReportTime:  100 * time.Millisecond,
+	}
+
+	// Send initial progress update
+	pw.sendProgress()
+	return pw
+}
+
+// Write implements io.Writer interface and tracks progress.
+func (pw *progressWriter) Write(p []byte) (n int, err error) {
+	n, err = pw.writer.Write(p)
+	if n > 0 {
+		pw.bytesWritten += int64(n)
+
+		// Send progress update if threshold reached
+		bytesSinceLastReport := pw.bytesWritten - pw.lastReportSize
+		timeSinceLastReport := time.Since(pw.lastUpdate)
+
+		if bytesSinceLastReport >= pw.minReportBytes || timeSinceLastReport >= pw.minReportTime {
+			pw.sendProgress()
+			pw.lastReportSize = pw.bytesWritten
+			pw.lastUpdate = time.Now()
+		}
+	}
+	return n, err
+}
+
+// sendProgress sends the current progress to subscribers.
+func (pw *progressWriter) sendProgress() {
+	progress := types.DownloadProgress{
+		Status:      types.DownloadStatusDownloading,
+		BytesTotal:  pw.bytesTotal,
+		BytesLoaded: pw.bytesWritten,
+		StartTime:   pw.startTime,
+		LastUpdate:  time.Now(),
+	}
+	pw.mediaManager.updateProgress(pw.key, progress)
+}
+
+// finish sends the final progress update (success or failure).
+func (pw *progressWriter) finish(err error) {
+	now := time.Now()
+	progress := types.DownloadProgress{
+		BytesTotal:  pw.bytesTotal,
+		BytesLoaded: pw.bytesWritten,
+		StartTime:   pw.startTime,
+		LastUpdate:  now,
+	}
+
+	if err != nil {
+		progress.Status = types.DownloadStatusFailed
+		progress.Error = err
+	} else {
+		progress.Status = types.DownloadStatusDownloaded
+		progress.BytesLoaded = pw.bytesTotal // Ensure 100% on success
+	}
+
+	pw.mediaManager.updateProgress(pw.key, progress)
 }
 
 // getPhotoSizePriority returns the priority for a given photo size type.
@@ -97,15 +235,17 @@ func selectBestPhotoSize(sizes []tg.PhotoSizeClass) *tg.PhotoSize {
 	return bestSize
 }
 
-// DownloadPhoto downloads a photo from a message.
-func (m *MediaManager) DownloadPhoto(ctx context.Context, photo *tg.Photo, chatID int64) (string, error) {
+// DownloadPhoto downloads a photo from a message with optional progress tracking.
+// If progressKey is non-empty, progress updates will be sent to subscribers of that key.
+func (m *MediaManager) DownloadPhoto(ctx context.Context, photo *tg.Photo, chatID int64, progressKey string) (string, error) {
 	if photo == nil {
 		return "", fmt.Errorf("photo is nil")
 	}
 
 	m.client.logger.Debug("DownloadPhoto called",
 		"photoID", photo.ID,
-		"sizeCount", len(photo.Sizes))
+		"sizeCount", len(photo.Sizes),
+		"progressKey", progressKey)
 
 	// Log all available sizes for debugging
 	for _, size := range photo.Sizes {
@@ -153,8 +293,8 @@ func (m *MediaManager) DownloadPhoto(ctx context.Context, photo *tg.Photo, chatI
 		return "", fmt.Errorf("failed to create chat directory: %w", err)
 	}
 
-	// Download the file
-	if err := m.downloadFile(ctx, location, localPath, int64(bestSize.Size)); err != nil {
+	// Download the file with progress tracking
+	if err := m.downloadFile(ctx, location, localPath, int64(bestSize.Size), progressKey); err != nil {
 		return "", fmt.Errorf("failed to download photo: %w", err)
 	}
 
@@ -173,11 +313,17 @@ func (m *MediaManager) DownloadPhoto(ctx context.Context, photo *tg.Photo, chatI
 	return localPath, nil
 }
 
-// DownloadDocument downloads a document (video, audio, file, etc.) from a message.
-func (m *MediaManager) DownloadDocument(ctx context.Context, doc *tg.Document, chatID int64) (string, error) {
+// DownloadDocument downloads a document (video, audio, file, etc.) from a message with optional progress tracking.
+// If progressKey is non-empty, progress updates will be sent to subscribers of that key.
+func (m *MediaManager) DownloadDocument(ctx context.Context, doc *tg.Document, chatID int64, progressKey string) (string, error) {
 	if doc == nil {
 		return "", fmt.Errorf("document is nil")
 	}
+
+	m.client.logger.Debug("DownloadDocument called",
+		"docID", doc.ID,
+		"size", doc.Size,
+		"progressKey", progressKey)
 
 	// Get file extension from mime type or filename
 	ext := ".bin"
@@ -216,25 +362,56 @@ func (m *MediaManager) DownloadDocument(ctx context.Context, doc *tg.Document, c
 		return "", fmt.Errorf("failed to create chat directory: %w", err)
 	}
 
-	// Download the file
-	if err := m.downloadFile(ctx, location, localPath, doc.Size); err != nil {
+	// Download the file with progress tracking
+	if err := m.downloadFile(ctx, location, localPath, doc.Size, progressKey); err != nil {
 		return "", fmt.Errorf("failed to download document: %w", err)
 	}
+
+	m.client.logger.Info("Downloaded document to file",
+		"path", localPath,
+		"fileName", fileName,
+		"size", doc.Size)
 
 	return localPath, nil
 }
 
-// downloadFile downloads a file from Telegram to local storage.
-func (m *MediaManager) downloadFile(ctx context.Context, location tg.InputFileLocationClass, localPath string, size int64) error {
+// downloadFile downloads a file from Telegram to local storage with optional progress tracking.
+// If progressKey is non-empty, progress updates will be sent to subscribers of that key.
+func (m *MediaManager) downloadFile(ctx context.Context, location tg.InputFileLocationClass, localPath string, size int64, progressKey string) error {
 	// Create the local file
 	file, err := os.Create(localPath)
 	if err != nil {
+		if progressKey != "" {
+			// Send failed status
+			m.updateProgress(progressKey, types.DownloadProgress{
+				Status:      types.DownloadStatusFailed,
+				BytesTotal:  size,
+				BytesLoaded: 0,
+				Error:       err,
+				StartTime:   time.Now(),
+				LastUpdate:  time.Now(),
+			})
+		}
 		return fmt.Errorf("failed to create local file: %w", err)
 	}
 	defer file.Close()
 
+	// Create writer (with or without progress tracking)
+	var writer io.Writer = file
+	var pw *progressWriter
+	if progressKey != "" {
+		pw = m.newProgressWriter(file, progressKey, size)
+		writer = pw
+	}
+
 	// Download the file
-	_, err = m.downloader.Download(m.client.api, location).Stream(ctx, file)
+	_, err = m.downloader.Download(m.client.api, location).Stream(ctx, writer)
+
+	// Send final progress update
+	if pw != nil {
+		pw.finish(err)
+	}
+
 	if err != nil {
 		// Clean up partial download on error
 		os.Remove(localPath)

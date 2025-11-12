@@ -171,19 +171,21 @@ type PhotoSize struct {
 
 // Media represents media content in a message.
 type Media struct {
-	ID            string
-	Width         int
-	Height        int
-	Duration      int
-	Size          int64
-	MimeType      string
-	Thumbnail     *Thumbnail
-	LocalPath     string
-	RemotePath    string
-	IsDownloaded  bool
-	AccessHash    int64        // Telegram AccessHash for downloading
-	FileReference []byte       // Telegram FileReference for downloading
-	PhotoSizes    []PhotoSize  // Photo sizes for photos (needed for download)
+	ID               string
+	Width            int
+	Height           int
+	Duration         int
+	Size             int64
+	MimeType         string
+	Thumbnail        *Thumbnail
+	LocalPath        string
+	RemotePath       string
+	IsDownloaded     bool
+	AccessHash       int64           // Telegram AccessHash for downloading
+	FileReference    []byte          // Telegram FileReference for downloading
+	PhotoSizes       []PhotoSize     // Photo sizes for photos (needed for download)
+	DownloadStatus   DownloadStatus  // Current download status
+	DownloadProgress *DownloadProgress // Download progress information (nil if not downloading/downloaded)
 }
 
 // Thumbnail represents a thumbnail for media content.
@@ -379,4 +381,63 @@ type FileDownload struct {
 	TotalSize      int64
 	LocalPath      string
 	Error          error
+}
+
+// DownloadStatus represents the current download status of media.
+type DownloadStatus int
+
+const (
+	DownloadStatusNotDownloaded DownloadStatus = iota
+	DownloadStatusDownloading
+	DownloadStatusDownloaded
+	DownloadStatusFailed
+)
+
+// DownloadProgress represents download progress information.
+type DownloadProgress struct {
+	Status      DownloadStatus
+	BytesTotal  int64
+	BytesLoaded int64
+	Error       error
+	StartTime   time.Time
+	LastUpdate  time.Time
+}
+
+// GetPercentage returns download progress as percentage (0-100).
+func (p *DownloadProgress) GetPercentage() float64 {
+	if p.BytesTotal <= 0 {
+		return 0
+	}
+	percentage := (float64(p.BytesLoaded) / float64(p.BytesTotal)) * 100
+	if percentage > 100 {
+		percentage = 100
+	}
+	return percentage
+}
+
+// GetSpeed returns download speed in bytes per second.
+// Returns 0 if no time has elapsed since start.
+func (p *DownloadProgress) GetSpeed() float64 {
+	elapsed := p.LastUpdate.Sub(p.StartTime).Seconds()
+	if elapsed <= 0 {
+		return 0
+	}
+	return float64(p.BytesLoaded) / elapsed
+}
+
+// GetETA returns estimated time remaining based on current speed.
+// Returns 0 if speed is 0 or all bytes are downloaded.
+func (p *DownloadProgress) GetETA() time.Duration {
+	if p.BytesLoaded >= p.BytesTotal {
+		return 0
+	}
+
+	speed := p.GetSpeed()
+	if speed <= 0 {
+		return 0
+	}
+
+	remainingBytes := p.BytesTotal - p.BytesLoaded
+	etaSeconds := float64(remainingBytes) / speed
+	return time.Duration(etaSeconds * float64(time.Second))
 }

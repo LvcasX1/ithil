@@ -14,7 +14,9 @@ Ithil is **production-ready** for daily use! All core features are implemented a
 
 ⚠️ **Partially Complete:** Video support (placeholder with metadata, external player integration planned)
 
-🔜 **Planned:** Notifications, advanced search, thumbnails, media caching with LRU eviction, video thumbnails, inline bots, secret chats, multiple themes
+🔜 **Planned:** Notifications, advanced search, video thumbnails, inline bots, secret chats, multiple themes
+
+✅ **Phase 2 Complete:** Thumbnail generation, LRU media caching (500MB default), download progress tracking
 
 The application uses the official Telegram MTProto protocol via gotd/td and implements a sophisticated update handling system for reliable real-time messaging. With ~8,500 lines of well-structured Go code, Ithil demonstrates modern TUI development practices with the Elm Architecture pattern.
 
@@ -64,6 +66,9 @@ The application uses the official Telegram MTProto protocol via gotd/td and impl
 - **Smart Search**: Real-time chat filtering for instant access to any conversation
 - **Advanced Media Rendering**: Automatic graphics protocol detection with fallback chain (Kitty → Sixel → Unicode Mosaic → ASCII)
 - **High-Fidelity Images**: Support for Kitty graphics protocol (pixel-perfect) and Sixel protocol (256-color)
+- **Smart Thumbnails**: Protocol-aware thumbnail generation with in-memory caching for instant browsing
+- **LRU Media Cache**: Intelligent 500MB cache with automatic eviction of least recently used files
+- **Download Progress**: Real-time progress tracking with speed and ETA for all media downloads
 - **Audio Playback**: Built-in audio player with waveform visualization and playback controls
 
 ## Screenshots
