@@ -16,32 +16,43 @@ import (
 
 // MediaViewerComponent represents a modal for viewing media files.
 type MediaViewerComponent struct {
-	message        *types.Message
-	mediaPath      string
-	width          int
-	height         int
-	visible        bool
-	content        string
-	imageRenderer  *media.ImageRenderer
-	mosaicRenderer *media.MosaicRenderer
-	audioRenderer  *media.AudioRenderer
-	renderError    error
-	downloading    bool
-	downloadedPath string
-	refreshTicker  *time.Ticker
-	stopRefresh    chan bool
+	message          *types.Message
+	mediaPath        string
+	width            int
+	height           int
+	visible          bool
+	content          string
+	imageRenderer    *media.ImageRenderer
+	mosaicRenderer   *media.MosaicRenderer
+	kittyRenderer    *media.KittyRenderer
+	sixelRenderer    *media.SixelRenderer
+	audioRenderer    *media.AudioRenderer
+	protocolDetector *media.ProtocolDetector
+	detectedProtocol media.GraphicsProtocol
+	renderError      error
+	downloading      bool
+	downloadedPath   string
+	refreshTicker    *time.Ticker
+	stopRefresh      chan bool
 }
 
 // NewMediaViewerComponent creates a new media viewer component.
 func NewMediaViewerComponent(width, height int) *MediaViewerComponent {
+	detector := media.NewProtocolDetector()
+	protocol := detector.DetectProtocol()
+
 	return &MediaViewerComponent{
-		width:          width,
-		height:         height,
-		visible:        false,
-		imageRenderer:  media.NewImageRenderer(width-6, height-6, true),
-		mosaicRenderer: media.NewMosaicRenderer(width-6, height-6, true),
-		audioRenderer:  media.NewAudioRenderer(width - 6),
-		stopRefresh:    make(chan bool),
+		width:            width,
+		height:           height,
+		visible:          false,
+		imageRenderer:    media.NewImageRenderer(width-6, height-6, true),
+		mosaicRenderer:   media.NewMosaicRenderer(width-6, height-6, true),
+		kittyRenderer:    media.NewKittyRenderer(width-6, height-6),
+		sixelRenderer:    media.NewSixelRenderer(width-6, height-6),
+		audioRenderer:    media.NewAudioRenderer(width - 6),
+		protocolDetector: detector,
+		detectedProtocol: protocol,
+		stopRefresh:      make(chan bool),
 	}
 }
 
@@ -275,6 +286,8 @@ func (m *MediaViewerComponent) SetSize(width, height int) {
 	// Update renderer dimensions - maximize available space while leaving room for borders
 	m.imageRenderer.SetDimensions(width-6, height-6)
 	m.mosaicRenderer.SetDimensions(width-6, height-6)
+	m.kittyRenderer.SetDimensions(width-6, height-6)
+	m.sixelRenderer.SetDimensions(width-6, height-6)
 	m.audioRenderer.SetMaxWidth(width - 6)
 }
 
@@ -291,9 +304,8 @@ func (m *MediaViewerComponent) renderMedia() {
 
 	switch m.message.Content.Type {
 	case types.MessageTypePhoto:
-		// Render image using mosaic (Unicode half-blocks) for better quality
-		m.mosaicRenderer.SetDimensions(contentWidth, contentHeight)
-		m.content, err = m.mosaicRenderer.RenderImageFile(m.downloadedPath)
+		// Render image using the best available protocol
+		m.content, err = m.renderImageWithBestProtocol(m.downloadedPath, contentWidth, contentHeight)
 		if err != nil {
 			m.renderError = err
 		}
@@ -479,4 +491,57 @@ func (m *MediaViewerComponent) startUIRefresh() {
 // stopUIRefresh stops periodic UI refresh.
 func (m *MediaViewerComponent) stopUIRefresh() {
 	// No-op: ticker is managed by Bubble Tea commands
+}
+
+// renderImageWithBestProtocol renders an image using the best available graphics protocol.
+// It automatically selects between Kitty, Sixel, Unicode Mosaic, or ASCII based on terminal capabilities.
+func (m *MediaViewerComponent) renderImageWithBestProtocol(filePath string, width, height int) (string, error) {
+	// Update dimensions for all renderers
+	m.kittyRenderer.SetDimensions(width, height)
+	m.sixelRenderer.SetDimensions(width, height)
+	m.mosaicRenderer.SetDimensions(width, height)
+	m.imageRenderer.SetDimensions(width, height)
+
+	// Render using the detected protocol
+	switch m.detectedProtocol {
+	case media.ProtocolKitty:
+		content, err := m.kittyRenderer.RenderImageFile(filePath)
+		if err != nil {
+			// Fallback to Sixel on error
+			if m.protocolDetector.DetectProtocol() >= media.ProtocolSixel {
+				return m.sixelRenderer.RenderImageFile(filePath)
+			}
+			// Fallback to Unicode Mosaic
+			return m.mosaicRenderer.RenderImageFile(filePath)
+		}
+		return content, nil
+
+	case media.ProtocolSixel:
+		content, err := m.sixelRenderer.RenderImageFile(filePath)
+		if err != nil {
+			// Fallback to Unicode Mosaic on error
+			return m.mosaicRenderer.RenderImageFile(filePath)
+		}
+		return content, nil
+
+	case media.ProtocolUnicodeMosaic:
+		return m.mosaicRenderer.RenderImageFile(filePath)
+
+	case media.ProtocolASCII:
+		return m.imageRenderer.RenderImageFile(filePath)
+
+	default:
+		// Fallback to Unicode Mosaic as safe default
+		return m.mosaicRenderer.RenderImageFile(filePath)
+	}
+}
+
+// GetDetectedProtocol returns the currently detected graphics protocol.
+func (m *MediaViewerComponent) GetDetectedProtocol() media.GraphicsProtocol {
+	return m.detectedProtocol
+}
+
+// GetProtocolInfo returns information about the detected protocol.
+func (m *MediaViewerComponent) GetProtocolInfo() string {
+	return m.protocolDetector.GetProtocolInfo()
 }
