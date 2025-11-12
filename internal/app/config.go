@@ -28,10 +28,11 @@ type AppConfig struct {
 
 // TelegramConfig contains Telegram API credentials and settings.
 type TelegramConfig struct {
-	APIID             string `yaml:"api_id"`
-	APIHash           string `yaml:"api_hash"`
-	SessionFile       string `yaml:"session_file"`
-	DatabaseDirectory string `yaml:"database_directory"`
+	UseDefaultCredentials bool   `yaml:"use_default_credentials"` // Use built-in credentials (default: true)
+	APIID                 string `yaml:"api_id"`                  // Custom API ID (optional)
+	APIHash               string `yaml:"api_hash"`                // Custom API Hash (optional)
+	SessionFile           string `yaml:"session_file"`
+	DatabaseDirectory     string `yaml:"database_directory"`
 }
 
 // UIConfig contains user interface settings.
@@ -115,10 +116,11 @@ func DefaultConfig() *Config {
 			Version: "0.1.0",
 		},
 		Telegram: TelegramConfig{
-			APIID:             "",
-			APIHash:           "",
-			SessionFile:       filepath.Join(configDir, "session.json"),
-			DatabaseDirectory: filepath.Join(configDir, "tdlib"),
+			UseDefaultCredentials: true, // Default to built-in credentials
+			APIID:                 "",   // Empty = use defaults
+			APIHash:               "",   // Empty = use defaults
+			SessionFile:           filepath.Join(configDir, "session.json"),
+			DatabaseDirectory:     filepath.Join(configDir, "tdlib"),
 		},
 		UI: UIConfig{
 			Theme: "dark",
@@ -243,12 +245,15 @@ func (c *Config) SaveConfig(path string) error {
 
 // Validate checks if the configuration is valid.
 func (c *Config) Validate() error {
-	if c.Telegram.APIID == "" || c.Telegram.APIID == "YOUR_API_ID" {
-		return fmt.Errorf("telegram API ID is not configured")
-	}
+	// Only validate custom credentials if not using defaults
+	if !c.Telegram.UseDefaultCredentials {
+		if c.Telegram.APIID == "" || c.Telegram.APIID == "YOUR_API_ID" {
+			return fmt.Errorf("telegram API ID is not configured")
+		}
 
-	if c.Telegram.APIHash == "" || c.Telegram.APIHash == "YOUR_API_HASH" {
-		return fmt.Errorf("telegram API hash is not configured")
+		if c.Telegram.APIHash == "" || c.Telegram.APIHash == "YOUR_API_HASH" {
+			return fmt.Errorf("telegram API hash is not configured")
+		}
 	}
 
 	if c.UI.Layout.ChatListWidth+c.UI.Layout.ConversationWidth+c.UI.Layout.InfoWidth != 100 {

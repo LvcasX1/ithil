@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strconv"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lvcasx1/ithil/internal/app"
@@ -45,19 +47,29 @@ func main() {
 		log.Fatalf("Failed to create application: %v", err)
 	}
 
+	// Check for credential change marker and clear session if needed
+	checkAndClearSessionOnCredentialChange(application)
+
+	// Get API credentials (default or custom)
+	apiID, apiHash := app.GetAPICredentials(application.Config)
+
+	// Log credential type being used
+	if app.IsUsingDefaultCredentials(application.Config) {
+		log.Println("Using default API credentials")
+		log.Println("For enhanced privacy, configure custom credentials in Settings (Ctrl+,)")
+	} else {
+		log.Println("Using custom API credentials")
+	}
+
 	// Validate configuration
 	if err := application.Config.Validate(); err != nil {
 		log.Printf("Warning: Configuration validation failed: %v", err)
-		log.Println("Please edit your config.yaml file with valid Telegram API credentials.")
-		log.Println("You can get API credentials from https://my.telegram.org")
-		log.Println()
-		log.Println("For now, the application will start in demo mode (authentication will not work).")
 	}
 
-	// Initialize Telegram client
+	// Initialize Telegram client with appropriate credentials
 	telegramConfig := &telegram.Config{
-		APIID:             application.Config.Telegram.APIID,
-		APIHash:           application.Config.Telegram.APIHash,
+		APIID:             strconv.Itoa(apiID),
+		APIHash:           apiHash,
 		SessionFile:       application.Config.Telegram.SessionFile,
 		DatabaseDirectory: application.Config.Telegram.DatabaseDirectory,
 	}
@@ -161,4 +173,38 @@ DOCUMENTATION:
     For more information, visit: https://github.com/lvcasx1/ithil
 
 `, version)
+}
+
+// checkAndClearSessionOnCredentialChange checks for credential change marker
+// and clears the session if credentials have been changed.
+func checkAndClearSessionOnCredentialChange(application *app.Application) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	markerPath := filepath.Join(homeDir, ".config", "ithil", ".credential-change")
+	if _, err := os.Stat(markerPath); err == nil {
+		// Marker file exists, clear session
+		log.Println("Credential change detected, clearing session for privacy...")
+
+		// Clear session file
+		sessionPath := application.Config.Telegram.SessionFile
+		if err := os.Remove(sessionPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("Warning: Could not remove session file: %v\n", err)
+		}
+
+		// Clear auth data file
+		authPath := sessionPath + ".auth"
+		if err := os.Remove(authPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("Warning: Could not remove auth data file: %v\n", err)
+		}
+
+		// Remove marker file
+		if err := os.Remove(markerPath); err != nil {
+			log.Printf("Warning: Could not remove credential change marker: %v\n", err)
+		}
+
+		log.Println("Session cleared successfully. You will need to log in again.")
+	}
 }

@@ -1,6 +1,6 @@
 # Ithil
 
-![Version](https://img.shields.io/badge/version-0.1.1-blue)
+![Version](https://img.shields.io/badge/version-0.1.2-blue)
 ![Go Version](https://img.shields.io/badge/go-1.23%2B-00ADD8)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -168,15 +168,59 @@ go build -o bin/ithil ./cmd/ithil
 go install github.com/lvcasx1/ithil/cmd/ithil@latest
 ```
 
-## Getting API Credentials
+## API Credentials
 
-To use Ithil, you need to obtain Telegram API credentials:
+### Zero-Setup Experience (Default)
 
-1. Visit https://my.telegram.org
-2. Log in with your phone number
-3. Go to "API Development Tools"
-4. Create a new application
-5. Copy your `api_id` and `api_hash`
+**Ithil works out of the box with no configuration required!**
+
+By default, Ithil uses built-in API credentials, allowing you to download and run the application immediately without any setup. Just install and start chatting!
+
+```bash
+# Download and run - that's it!
+ithil
+```
+
+### Custom Credentials (Enhanced Privacy)
+
+For users who want enhanced privacy, Ithil supports custom API credentials. With custom credentials:
+
+- You have your own Telegram app identity
+- You get your own rate limits
+- You have complete control over your API usage
+
+**To use custom credentials:**
+
+#### Option 1: Settings Menu (Recommended)
+
+1. Run Ithil with default credentials
+2. Log in to your account
+3. Press `Ctrl+,` to open Settings
+4. Navigate to the Account tab
+5. Toggle to "Use custom credentials"
+6. Enter your API ID and API Hash
+7. Press `Ctrl+S` to save
+8. Restart Ithil and log in again
+
+#### Option 2: Configuration File
+
+1. Get credentials from https://my.telegram.org:
+   - Log in with your phone number
+   - Go to "API Development Tools"
+   - Create a new application
+   - Copy your `api_id` and `api_hash`
+
+2. Create or edit `~/.config/ithil/config.yaml`:
+```yaml
+telegram:
+  use_default_credentials: false
+  api_id: "12345678"
+  api_hash: "abcdef1234567890abcdef1234567890"
+```
+
+3. Restart Ithil
+
+**Note:** Switching between default and custom credentials will clear your session for privacy. You'll need to log in again.
 
 ## Configuration
 
@@ -186,14 +230,18 @@ Ithil looks for configuration files in the following order:
 2. `~/.config/ithil/config.yaml`
 3. `~/.ithil.yaml`
 
-### Initial Setup
+### Initial Setup (Optional)
+
+Configuration is **completely optional**. Ithil works with default settings right away.
+
+If you want to customize:
 
 ```bash
 # Copy the example configuration
-cp config.example.yaml config.yaml
+cp config.example.yaml ~/.config/ithil/config.yaml
 
-# Edit the configuration with your API credentials
-nano config.yaml  # or your preferred editor
+# Edit the configuration
+nano ~/.config/ithil/config.yaml  # or your preferred editor
 ```
 
 ### Configuration Options
@@ -279,6 +327,7 @@ ithil -help
 | `Ctrl+2` | Focus conversation |
 | `Ctrl+3` | Focus sidebar |
 | `Ctrl+S` | Toggle sidebar |
+| `Ctrl+,` | Open settings |
 | `S` | Toggle stealth mode |
 | `Ctrl+R` | Refresh |
 | `/`, `Ctrl+F` | Search |

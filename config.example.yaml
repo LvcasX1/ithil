@@ -6,8 +6,17 @@ app:
   version: "0.1.0"
 
 telegram:
-  api_id: "YOUR_API_ID"              # Get from https://my.telegram.org
-  api_hash: "YOUR_API_HASH"          # Get from https://my.telegram.org
+  # API Credentials
+  # By default, Ithil uses built-in credentials for zero-setup experience
+  # For enhanced privacy, set use_default_credentials to false and provide your own
+  use_default_credentials: true
+
+  # Custom API credentials (optional - only used if use_default_credentials is false)
+  # Get your own credentials from https://my.telegram.org
+  api_id: ""        # Your custom API ID (7-9 digits)
+  api_hash: ""      # Your custom API Hash (32 hex characters)
+
+  # Session and database storage
   session_file: "~/.config/ithil/session.json"
   database_directory: "~/.config/ithil/tdlib"
 

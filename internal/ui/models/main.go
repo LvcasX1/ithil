@@ -24,6 +24,7 @@ const (
 	FocusChatList FocusPane = iota
 	FocusConversation
 	FocusSidebar
+	FocusSettings
 )
 
 // MainModel is the root Bubbletea model for the application.
@@ -43,6 +44,7 @@ type MainModel struct {
 	chatList     *ChatListModel
 	conversation *ConversationModel
 	sidebar      *SidebarModel
+	settings     *SettingsModel
 	statusBar    *components.StatusBarComponent
 	filePicker   *components.FilePickerComponent
 	helpModal    *components.HelpModalComponent
@@ -51,6 +53,7 @@ type MainModel struct {
 	focusPane      FocusPane
 	currentChat    *types.Chat
 	showFilePicker bool
+	showSettings   bool
 	errorMessage   string
 }
 
@@ -86,6 +89,7 @@ func NewMainModel(config *app.Config, client *telegram.Client) *MainModel {
 		chatList:     NewChatListModel(cache),
 		conversation: NewConversationModel(client, cache),
 		sidebar:      NewSidebarModel(cache),
+		settings:     NewSettingsModel(config),
 		statusBar:    components.NewStatusBarComponent(100),
 		helpModal:    components.NewHelpModalComponent(),
 	}
@@ -115,6 +119,18 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// Handle settings modal updates when visible
+	if m.showSettings {
+		keyMsg, ok := msg.(tea.KeyMsg)
+		if ok && keyMsg.String() == "esc" {
+			m.showSettings = false
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.settings, cmd = m.settings.Update(msg)
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Global key bindings
@@ -125,6 +141,15 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Only toggle help if input is not focused (so users can type "?" in messages)
 			if m.authenticated && m.conversation != nil && !m.conversation.input.Focused {
 				m.helpModal.Show()
+				return m, nil
+			}
+		case "ctrl+,":
+			// Only toggle settings if authenticated and input is not focused
+			if m.authenticated && m.conversation != nil && !m.conversation.input.Focused {
+				m.showSettings = !m.showSettings
+				if m.showSettings {
+					m.settings.SetSize(m.width, m.height)
+				}
 				return m, nil
 			}
 		case "ctrl+s":
@@ -379,6 +404,11 @@ func (m *MainModel) View() string {
 	// If not authenticated, show auth screen
 	if !m.authenticated {
 		return m.auth.View()
+	}
+
+	// If settings is shown, render settings screen
+	if m.showSettings {
+		return m.settings.View()
 	}
 
 	// Show main UI with three panes
