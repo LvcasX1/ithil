@@ -1,0 +1,304 @@
+# GoReleaser configuration for Ithil
+# Documentation: https://goreleaser.com
+
+version: 2
+
+project_name: ithil
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: ithil
+    main: ./cmd/ithil
+    binary: ithil
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    format_overrides:
+      - goos: windows
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+      - config.example.yaml
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: 'Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 'Documentation'
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: 'Other changes'
+      order: 999
+
+# Homebrew
+brews:
+  - repository:
+      owner: lvcasx1
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/lvcasx1/ithil
+    description: "A Terminal User Interface (TUI) Telegram client built with Go and Bubbletea"
+    license: MIT
+    skip_upload: auto
+    test: |
+      system "#{bin}/ithil", "-version"
+    install: |
+      bin.install "ithil"
+      (etc/"ithil").install "config.example.yaml"
+    caveats: |
+      To get started, copy the example configuration:
+        cp #{etc}/ithil/config.example.yaml ~/.config/ithil/config.yaml
+
+      Then edit the configuration file with your Telegram API credentials from https://my.telegram.org
+
+# Chocolatey (Windows)
+chocolateys:
+  - name: ithil
+    title: Ithil TUI Telegram Client
+    authors: LvcasX1
+    project_url: https://github.com/lvcasx1/ithil
+    copyright: 2025 LvcasX1
+    license_url: https://github.com/lvcasx1/ithil/blob/master/LICENSE
+    require_license_acceptance: false
+    project_source_url: https://github.com/lvcasx1/ithil
+    docs_url: https://github.com/lvcasx1/ithil/blob/master/README.md
+    bug_tracker_url: https://github.com/lvcasx1/ithil/issues
+    tags: "telegram tui terminal chat messaging go bubbletea"
+    summary: A Terminal User Interface Telegram client built with Go
+    description: |
+      Ithil is a feature-rich Terminal User Interface (TUI) Telegram client
+      built with Go and Bubbletea. It brings the full Telegram experience
+      to your terminal with a beautiful, keyboard-driven interface.
+
+      Features:
+      - Full Telegram authentication and real-time messaging
+      - Message editing, deletion, forwarding, and reactions
+      - Media support (images, audio, video, voice notes)
+      - Chat management (pin, mute, archive)
+      - Stealth mode and privacy controls
+      - Beautiful TUI with vim-style navigation
+    release_notes: "https://github.com/lvcasx1/ithil/releases/tag/v{{ .Version }}"
+    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
+    skip_publish: true
+
+# Scoop (Windows)
+scoops:
+  - repository:
+      owner: lvcasx1
+      name: scoop-bucket
+      token: "{{ .Env.SCOOP_GITHUB_TOKEN }}"
+    directory: bucket
+    homepage: https://github.com/lvcasx1/ithil
+    description: A Terminal User Interface (TUI) Telegram client built with Go and Bubbletea
+    license: MIT
+    skip_upload: auto
+
+# nFPM - DEB and RPM packages
+nfpms:
+  - id: ithil
+    package_name: ithil
+    vendor: LvcasX1
+    homepage: https://github.com/lvcasx1/ithil
+    maintainer: LvcasX1 <contact@lvcasx1.dev>
+    description: |
+      A Terminal User Interface (TUI) Telegram client built with Go and Bubbletea.
+      Ithil brings the full Telegram experience to your terminal with a beautiful,
+      keyboard-driven interface.
+    license: MIT
+
+    formats:
+      - deb
+      - rpm
+      - apk
+
+    bindir: /usr/bin
+
+    contents:
+      - src: ./config.example.yaml
+        dst: /usr/share/doc/ithil/config.example.yaml
+      - src: ./LICENSE
+        dst: /usr/share/doc/ithil/LICENSE
+      - src: ./README.md
+        dst: /usr/share/doc/ithil/README.md
+
+    # DEB-specific
+    deb:
+      lintian_overrides:
+        - statically-linked-binary
+        - changelog-file-missing-in-native-package
+
+    # RPM-specific
+    rpm:
+      group: Applications/Internet
+      compression: lzma
+      summary: TUI Telegram Client
+
+# AUR (Arch Linux)
+aurs:
+  - name: ithil-bin
+    homepage: https://github.com/lvcasx1/ithil
+    description: "A Terminal User Interface (TUI) Telegram client built with Go and Bubbletea (binary release)"
+    maintainers:
+      - 'LvcasX1 <contact@lvcasx1.dev>'
+    license: MIT
+    private_key: "{{ .Env.AUR_SSH_PRIVATE_KEY }}"
+    git_url: 'ssh://aur@aur.archlinux.org/ithil-bin.git'
+    skip_upload: auto
+    package: |-
+      # bin
+      install -Dm755 "./ithil" "${pkgdir}/usr/bin/ithil"
+
+      # license
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/ithil/LICENSE"
+
+      # documentation
+      install -Dm644 "./README.md" "${pkgdir}/usr/share/doc/ithil/README.md"
+
+      # config example
+      install -Dm644 "./config.example.yaml" "${pkgdir}/usr/share/doc/ithil/config.example.yaml"
+    commit_author:
+      name: LvcasX1
+      email: contact@lvcasx1.dev
+
+# Snapcraft (Universal Linux)
+snapcrafts:
+  - id: ithil
+    name: ithil
+    summary: TUI Telegram Client
+    description: |
+      Ithil is a feature-rich Terminal User Interface (TUI) Telegram client
+      built with Go and Bubbletea. It brings the full Telegram experience
+      to your terminal with a beautiful, keyboard-driven interface.
+
+      Features:
+      - Full Telegram authentication and real-time messaging
+      - Message editing, deletion, forwarding, and reactions
+      - Media support (images, audio, video, voice notes)
+      - Chat management (pin, mute, archive)
+      - Stealth mode and privacy controls
+      - Beautiful TUI with vim-style navigation
+
+    publish: false  # Set to true when ready to publish
+    grade: stable
+    confinement: strict
+    license: MIT
+
+    base: core22
+
+    apps:
+      ithil:
+        command: ithil
+        plugs:
+          - home
+          - network
+          - network-bind
+
+    extra_files:
+      - source: config.example.yaml
+        destination: config.example.yaml
+        mode: 0644
+
+# Release settings
+release:
+  github:
+    owner: lvcasx1
+    name: ithil
+  name_template: "Release {{.Version}}"
+  draft: false
+  prerelease: auto
+  mode: append
+  header: |
+    ## Ithil {{.Version}}
+
+    **Installation Options:**
+
+    ### Package Managers
+    ```bash
+    # Homebrew (macOS/Linux)
+    brew tap lvcasx1/tap
+    brew install ithil
+
+    # Chocolatey (Windows)
+    choco install ithil
+
+    # Scoop (Windows)
+    scoop bucket add lvcasx1 https://github.com/lvcasx1/scoop-bucket
+    scoop install ithil
+
+    # AUR (Arch Linux)
+    yay -S ithil-bin
+
+    # Debian/Ubuntu
+    # Download the .deb file below and install with:
+    sudo dpkg -i ithil_{{.Version}}_Linux_x86_64.deb
+
+    # Fedora/RHEL/CentOS
+    # Download the .rpm file below and install with:
+    sudo rpm -i ithil_{{.Version}}_Linux_x86_64.rpm
+    ```
+
+    ### Direct Download
+    Download the appropriate archive for your platform below.
+
+  footer: |
+    **Full Changelog**: https://github.com/lvcasx1/ithil/blob/master/CHANGELOG.md
+
+    ---
+
+    **Getting Started:**
+    1. Get your Telegram API credentials from https://my.telegram.org
+    2. Copy the example configuration: `cp config.example.yaml ~/.config/ithil/config.yaml`
+    3. Edit the config with your credentials
+    4. Run: `ithil`
+
+# Announce releases
+announce:
+  skip: '{{gt .Patch 0}}'  # Only announce major/minor releases, not patches
