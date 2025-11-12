@@ -2,8 +2,6 @@
 package models
 
 import (
-	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -267,22 +265,6 @@ func (m *ChatListModel) View() string {
 
 	// Combine all parts
 	result := topBorder + "\n" + strings.Join(borderedLines, "\n") + "\n" + bottomBorder
-
-	// DEBUG: Log first line to see if title is there
-	f, _ := os.OpenFile("/tmp/ithil-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if f != nil {
-		firstLine := strings.Split(result, "\n")[0]
-		fmt.Fprintf(f, "ChatList View() details:\n")
-		fmt.Fprintf(f, "  width=%d, height=%d, focused=%v\n", m.width, m.height, m.focused)
-		fmt.Fprintf(f, "  title=%q, titleLen=%d, remainingWidth=%d\n", title, titleLen, remainingWidth)
-		fmt.Fprintf(f, "  topBorderLeft=%q\n", topBorderLeft)
-		fmt.Fprintf(f, "  topBorderTitle=%q\n", topBorderTitle)
-		fmt.Fprintf(f, "  topBorderRight=%q\n", topBorderRight)
-		fmt.Fprintf(f, "  topBorder (full)=%q\n", topBorder)
-		fmt.Fprintf(f, "  lipgloss.Width(topBorder)=%d\n", lipgloss.Width(topBorder))
-		fmt.Fprintf(f, "  Raw bytes len=%d\n\n", len(firstLine))
-		f.Close()
-	}
 
 	return result
 }

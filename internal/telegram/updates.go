@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/gotd/td/tg"
@@ -44,14 +43,6 @@ func (h *UpdateHandler) SetCache(cache CacheInterface) {
 
 // Handle processes incoming updates from gotd.
 func (h *UpdateHandler) Handle(ctx context.Context, updates tg.UpdatesClass) error {
-	// DEBUG: Log to file AND to logger
-	logMsg := fmt.Sprintf("[%s] !!! Handle() CALLED !!! type=%T", time.Now().Format("15:04:05"), updates)
-
-	if f, err := os.OpenFile("/tmp/ithil-updates.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-		fmt.Fprintf(f, "%s\n", logMsg)
-		f.Close()
-	}
-
 	h.logger.Info("UPDATE RECEIVED", "type", fmt.Sprintf("%T", updates))
 
 	switch u := updates.(type) {
@@ -120,12 +111,6 @@ func (h *UpdateHandler) handleNewMessage(ctx context.Context, msg tg.MessageClas
 	message := h.convertMessage(msg)
 	if message == nil {
 		return
-	}
-
-	// DEBUG: Log to file
-	if f, err := os.OpenFile("/tmp/ithil-updates.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-		fmt.Fprintf(f, "[%s] Telegram: handleNewMessage called, chatID=%d\n", time.Now().Format("15:04:05"), message.ChatID)
-		f.Close()
 	}
 
 	h.logger.Info("New message update received", "chatID", message.ChatID, "text", message.Content.Text[:min(50, len(message.Content.Text))])
@@ -408,26 +393,11 @@ func (h *UpdateHandler) convertMessageContent(msg *tg.Message) types.MessageCont
 
 // sendUpdate sends an update to the updates channel.
 func (h *UpdateHandler) sendUpdate(update *types.Update) {
-	// DEBUG: Log before sending
-	if f, err := os.OpenFile("/tmp/ithil-updates.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-		fmt.Fprintf(f, "[%s] Telegram: sendUpdate() attempting to send type=%d to channel\n", time.Now().Format("15:04:05"), update.Type)
-		f.Close()
-	}
-
 	select {
 	case h.client.updates <- update:
-		// DEBUG: Log successful send
-		if f, err := os.OpenFile("/tmp/ithil-updates.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-			fmt.Fprintf(f, "[%s] Telegram: sendUpdate() successfully sent to channel\n", time.Now().Format("15:04:05"))
-			f.Close()
-		}
+		// Update sent successfully
 	default:
-		h.logger.Warn("Update channel is full, dropping update")
-		// DEBUG: Log drop
-		if f, err := os.OpenFile("/tmp/ithil-updates.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-			fmt.Fprintf(f, "[%s] Telegram: sendUpdate() DROPPED - channel full!\n", time.Now().Format("15:04:05"))
-			f.Close()
-		}
+		h.logger.Warn("Update channel is full, dropping update", "type", update.Type)
 	}
 }
 

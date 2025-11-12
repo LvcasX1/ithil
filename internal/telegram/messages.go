@@ -413,6 +413,18 @@ func (c *Client) chatToInputPeer(chat *types.Chat) (tg.InputPeerClass, error) {
 	}
 }
 
+// chatToInputChannel converts a chat to InputChannel for channel-specific operations.
+func (c *Client) chatToInputChannel(chat *types.Chat) (tg.InputChannelClass, error) {
+	if chat.Type != types.ChatTypeChannel && chat.Type != types.ChatTypeSupergroup {
+		return nil, fmt.Errorf("chat is not a channel or supergroup: %v", chat.Type)
+	}
+
+	return &tg.InputChannel{
+		ChannelID:  chat.ID,
+		AccessHash: chat.AccessHash,
+	}, nil
+}
+
 // convertForwardInfo converts Telegram forward info to internal format
 func (c *Client) convertForwardInfo(fwd *tg.MessageFwdHeader) *types.ForwardInfo {
 	info := &types.ForwardInfo{
@@ -706,22 +718,121 @@ func (c *Client) EditMessage(chat *types.Chat, messageID int64, newText string) 
 }
 
 // DeleteMessage deletes a message.
-func (c *Client) DeleteMessage(chatID, messageID int64) error {
-	c.logger.Info("Deleting message", "chatID", chatID, "messageID", messageID)
+func (c *Client) DeleteMessage(chat *types.Chat, messageID int64) error {
+	c.logger.Info("Deleting message", "chatID", chat.ID, "messageID", messageID)
 
-	// TODO: Implement message deletion with gotd API
-	// Use c.api.MessagesDeleteMessages() with appropriate parameters
+	// For channels and supergroups, use ChannelsDeleteMessages
+	if chat.Type == types.ChatTypeChannel || chat.Type == types.ChatTypeSupergroup {
+		inputChannel, err := c.chatToInputChannel(chat)
+		if err != nil {
+			return fmt.Errorf("failed to convert chat to InputChannel: %w", err)
+		}
 
+		_, err = c.api.ChannelsDeleteMessages(c.ctx, &tg.ChannelsDeleteMessagesRequest{
+			Channel: inputChannel,
+			ID:      []int{int(messageID)},
+		})
+		if err != nil {
+			c.logger.Error("Failed to delete channel message", "error", err)
+			return fmt.Errorf("failed to delete message: %w", err)
+		}
+	} else {
+		// For regular chats (private, group), use MessagesDeleteMessages
+		_, err := c.api.MessagesDeleteMessages(c.ctx, &tg.MessagesDeleteMessagesRequest{
+			Revoke: true, // Delete for both parties if within 48h
+			ID:     []int{int(messageID)},
+		})
+		if err != nil {
+			c.logger.Error("Failed to delete message", "error", err)
+			return fmt.Errorf("failed to delete message: %w", err)
+		}
+	}
+
+	c.logger.Info("Message deleted successfully", "chatID", chat.ID, "messageID", messageID)
 	return nil
 }
 
-// ForwardMessage forwards a message to another chat.
-func (c *Client) ForwardMessage(fromChatID, toChatID, messageID int64) error {
-	c.logger.Info("Forwarding message", "fromChatID", fromChatID, "toChatID", toChatID, "messageID", messageID)
+// ForwardMessage forwards messages to another chat.
+func (c *Client) ForwardMessage(fromChat, toChat *types.Chat, messageIDs []int64) error {
+	c.logger.Info("Forwarding messages", "fromChatID", fromChat.ID, "toChatID", toChat.ID, "messageCount", len(messageIDs))
 
-	// TODO: Implement message forwarding with gotd API
-	// Use c.api.MessagesForwardMessages() with appropriate parameters
+	if len(messageIDs) == 0 {
+		return fmt.Errorf("no messages to forward")
+	}
 
+	// Convert chats to InputPeer
+	fromPeer, err := c.chatToInputPeer(fromChat)
+	if err != nil {
+		c.logger.Error("Failed to convert from chat to InputPeer", "error", err)
+		return fmt.Errorf("failed to convert from chat: %w", err)
+	}
+
+	toPeer, err := c.chatToInputPeer(toChat)
+	if err != nil {
+		c.logger.Error("Failed to convert to chat to InputPeer", "error", err)
+		return fmt.Errorf("failed to convert to chat: %w", err)
+	}
+
+	// Convert message IDs to int slice
+	ids := make([]int, len(messageIDs))
+	for i, id := range messageIDs {
+		ids[i] = int(id)
+	}
+
+	// Generate random IDs for deduplication (one per message)
+	randomIDs := make([]int64, len(messageIDs))
+	for i := range randomIDs {
+		randomIDs[i] = c.generateRandomID()
+	}
+
+	// Forward messages using gotd API
+	_, err = c.api.MessagesForwardMessages(c.ctx, &tg.MessagesForwardMessagesRequest{
+		FromPeer: fromPeer,
+		ID:       ids,
+		RandomID: randomIDs,
+		ToPeer:   toPeer,
+	})
+
+	if err != nil {
+		c.logger.Error("Failed to forward messages", "error", err)
+		return fmt.Errorf("failed to forward messages: %w", err)
+	}
+
+	c.logger.Info("Messages forwarded successfully", "count", len(messageIDs))
+	return nil
+}
+
+// ReactToMessage adds or removes a reaction to a message.
+func (c *Client) ReactToMessage(chat *types.Chat, messageID int64, reaction string) error {
+	c.logger.Info("Reacting to message", "chatID", chat.ID, "messageID", messageID, "reaction", reaction)
+
+	inputPeer, err := c.chatToInputPeer(chat)
+	if err != nil {
+		c.logger.Error("Failed to convert chat to InputPeer", "error", err)
+		return fmt.Errorf("failed to convert chat: %w", err)
+	}
+
+	// Create reaction - use emoticon reaction
+	var reactionList []tg.ReactionClass
+	if reaction != "" {
+		reactionList = []tg.ReactionClass{
+			&tg.ReactionEmoji{Emoticon: reaction},
+		}
+	}
+	// Empty list removes reaction
+
+	_, err = c.api.MessagesSendReaction(c.ctx, &tg.MessagesSendReactionRequest{
+		Peer:     inputPeer,
+		MsgID:    int(messageID),
+		Reaction: reactionList,
+	})
+
+	if err != nil {
+		c.logger.Error("Failed to send reaction", "error", err)
+		return fmt.Errorf("failed to send reaction: %w", err)
+	}
+
+	c.logger.Info("Reaction sent successfully", "messageID", messageID, "reaction", reaction)
 	return nil
 }
 
