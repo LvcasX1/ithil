@@ -56,34 +56,49 @@ func TestValidate_Success(t *testing.T) {
 
 func TestValidate_MissingAPIID(t *testing.T) {
 	config := DefaultConfig()
+	config.Telegram.UseDefaultCredentials = false // Explicitly use custom credentials
 	config.Telegram.APIID = ""
 	config.Telegram.APIHash = "abcdef123456"
 
 	err := config.Validate()
 	if err == nil {
-		t.Error("Expected error for missing API ID")
+		t.Error("Expected error for missing API ID when using custom credentials")
 	}
 }
 
 func TestValidate_MissingAPIHash(t *testing.T) {
 	config := DefaultConfig()
+	config.Telegram.UseDefaultCredentials = false // Explicitly use custom credentials
 	config.Telegram.APIID = "12345"
 	config.Telegram.APIHash = ""
 
 	err := config.Validate()
 	if err == nil {
-		t.Error("Expected error for missing API hash")
+		t.Error("Expected error for missing API hash when using custom credentials")
 	}
 }
 
 func TestValidate_PlaceholderAPIID(t *testing.T) {
 	config := DefaultConfig()
+	config.Telegram.UseDefaultCredentials = false // Explicitly use custom credentials
 	config.Telegram.APIID = "YOUR_API_ID"
 	config.Telegram.APIHash = "abcdef123456"
 
 	err := config.Validate()
 	if err == nil {
-		t.Error("Expected error for placeholder API ID")
+		t.Error("Expected error for placeholder API ID when using custom credentials")
+	}
+}
+
+func TestValidate_DefaultCredentials(t *testing.T) {
+	config := DefaultConfig()
+	// UseDefaultCredentials is true by default, empty credentials should pass
+	config.Telegram.APIID = ""
+	config.Telegram.APIHash = ""
+
+	err := config.Validate()
+	if err != nil {
+		t.Errorf("Expected no error when using default credentials, got: %v", err)
 	}
 }
 
