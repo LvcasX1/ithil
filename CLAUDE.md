@@ -10,18 +10,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Building
 ```bash
-# Standard build
+# Standard build (IMPORTANT: Include -tags cgo for audio playback support)
+go build -tags cgo -o bin/ithil ./cmd/ithil
+
+# Run directly (with CGO for audio support)
+go run -tags cgo cmd/ithil/main.go
+
+# Build without audio support (uses stub audio player)
 go build -o bin/ithil ./cmd/ithil
 
-# Run directly
-go run cmd/ithil/main.go
-
-# Cross-platform builds
-GOOS=linux GOARCH=amd64 go build -o bin/ithil-linux-amd64 ./cmd/ithil
-GOOS=darwin GOARCH=amd64 go build -o bin/ithil-darwin-amd64 ./cmd/ithil
-GOOS=darwin GOARCH=arm64 go build -o bin/ithil-darwin-arm64 ./cmd/ithil
-GOOS=windows GOARCH=amd64 go build -o bin/ithil-windows-amd64.exe ./cmd/ithil
+# Cross-platform builds (with CGO for audio support)
+CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -tags cgo -o bin/ithil-linux-amd64 ./cmd/ithil
+CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -tags cgo -o bin/ithil-darwin-amd64 ./cmd/ithil
+CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -tags cgo -o bin/ithil-darwin-arm64 ./cmd/ithil
+CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -tags cgo -o bin/ithil-windows-amd64.exe ./cmd/ithil
 ```
+
+**Note:** Audio playback requires CGO. Without `-tags cgo`, the app will build successfully but audio features will not work (will show "audio playback not supported" errors).
 
 ### Development with Hot-Reload
 ```bash
@@ -33,7 +38,7 @@ air
 ```
 
 Air is configured to:
-- Build to `./tmp/main`
+- Build to `./tmp/main` with `-tags cgo` for audio support
 - Watch `.go`, `.tpl`, `.tmpl`, `.html` files
 - Exclude `_test.go`, `tmp/`, `vendor/`, `testdata/` directories
 - Log build errors to `build-errors.log`

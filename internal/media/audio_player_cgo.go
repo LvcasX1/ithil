@@ -44,6 +44,7 @@ type AudioPlayer struct {
 	ticker          *time.Ticker
 	stopTicker      chan bool
 	speed           float64 // Playback speed (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x)
+	trackingActive  bool    // Prevents multiple position tracking goroutines
 }
 
 // NewAudioPlayer creates a new audio player instance.
@@ -497,8 +498,16 @@ func (p *AudioPlayer) initSpeaker(sampleRate beep.SampleRate) error {
 
 // startPositionTracking starts tracking playback position.
 func (p *AudioPlayer) startPositionTracking() {
+	// Check if tracking is already active to prevent multiple goroutines
+	if p.trackingActive {
+		return
+	}
+
 	// Stop any existing ticker
 	p.stopPositionTracking()
+
+	// Mark tracking as active
+	p.trackingActive = true
 
 	// Start new ticker
 	p.ticker = time.NewTicker(100 * time.Millisecond)
@@ -529,5 +538,6 @@ func (p *AudioPlayer) stopPositionTracking() {
 		p.ticker.Stop()
 		close(p.stopTicker)
 		p.ticker = nil
+		p.trackingActive = false
 	}
 }

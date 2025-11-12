@@ -99,7 +99,9 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 					m.audioRenderer.GetAudioPlayer().TogglePlayPause()
 				}
 				m.renderMedia()
+				return m, m.scheduleRefresh()
 			}
+			return m, nil
 
 		case "left":
 			if isAudioMessage {
@@ -109,7 +111,9 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 					m.audioRenderer.GetAudioPlayer().SkipBackward(5 * time.Second)
 				}
 				m.renderMedia()
+				return m, m.scheduleRefresh()
 			}
+			return m, nil
 
 		case "right":
 			if isAudioMessage {
@@ -119,7 +123,9 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 					m.audioRenderer.GetAudioPlayer().SkipForward(5 * time.Second)
 				}
 				m.renderMedia()
+				return m, m.scheduleRefresh()
 			}
+			return m, nil
 
 		case "up":
 			if isAudioMessage {
@@ -129,7 +135,9 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 					m.audioRenderer.GetAudioPlayer().VolumeUp()
 				}
 				m.renderMedia()
+				return m, m.scheduleRefresh()
 			}
+			return m, nil
 
 		case "down":
 			if isAudioMessage {
@@ -139,7 +147,9 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 					m.audioRenderer.GetAudioPlayer().VolumeDown()
 				}
 				m.renderMedia()
+				return m, m.scheduleRefresh()
 			}
+			return m, nil
 
 		// Speed control
 		case "[":
@@ -150,7 +160,9 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 					m.audioRenderer.GetAudioPlayer().SpeedDown()
 				}
 				m.renderMedia()
+				return m, m.scheduleRefresh()
 			}
+			return m, nil
 
 		case "]":
 			if isAudioMessage {
@@ -160,7 +172,9 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 					m.audioRenderer.GetAudioPlayer().SpeedUp()
 				}
 				m.renderMedia()
+				return m, m.scheduleRefresh()
 			}
+			return m, nil
 		}
 
 	case MediaDownloadedMsg:
