@@ -144,13 +144,21 @@ func (m *MediaViewerComponent) View() string {
 		return ""
 	}
 
-	// Create modal style
+	// For Sixel/Kitty protocols, we need different styling to prevent UI shifts
+	// These protocols render pixel graphics that take up vertical space in the terminal
+	usePixelProtocol := m.detectedProtocol == media.ProtocolKitty || m.detectedProtocol == media.ProtocolSixel
+
+	// Create modal style - DON'T use MaxHeight for pixel protocols
 	modalStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(styles.AccentCyan)).
 		Padding(1, 2).
-		Width(m.width).
-		MaxHeight(m.height)
+		Width(m.width)
+
+	// Only set MaxHeight for text-based protocols (Mosaic/ASCII)
+	if !usePixelProtocol {
+		modalStyle = modalStyle.MaxHeight(m.height)
+	}
 
 	// Build modal content
 	var contentBuilder strings.Builder
