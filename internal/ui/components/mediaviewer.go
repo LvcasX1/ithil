@@ -381,10 +381,7 @@ func (m *MediaViewerComponent) ShowMedia(message *types.Message, mediaPath strin
 		}
 	}
 
-	// Render immediately if file exists
-	m.renderMedia()
-
-	// For audio/voice messages, load the file and start UI refresh
+	// For audio/voice messages, load the file FIRST, then render
 	if message.Content.Type == types.MessageTypeAudio ||
 		message.Content.Type == types.MessageTypeVoice {
 		// Load audio file into the appropriate player
@@ -397,15 +394,21 @@ func (m *MediaViewerComponent) ShowMedia(message *types.Message, mediaPath strin
 			audioPlayer = m.audioRenderer.GetAudioPlayer()
 		}
 
+		// Load the audio file (this initializes the speaker)
 		if err := audioPlayer.LoadFile(m.downloadedPath); err != nil {
 			m.renderError = err
 		}
+
+		// Now render with initialized player state
+		m.renderMedia()
 
 		// Start UI refresh for playback updates
 		m.startUIRefresh()
 		return m.scheduleRefresh()
 	}
 
+	// For non-audio media, render immediately
+	m.renderMedia()
 	return nil
 }
 
