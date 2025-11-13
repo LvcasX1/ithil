@@ -93,10 +93,14 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 		case " ":
 			if isAudioMessage {
 				// Use external player if available, otherwise use local renderer's player
+				var err error
 				if m.externalAudioPlayer != nil {
-					m.externalAudioPlayer.TogglePlayPause()
+					err = m.externalAudioPlayer.TogglePlayPause()
 				} else {
-					m.audioRenderer.GetAudioPlayer().TogglePlayPause()
+					err = m.audioRenderer.GetAudioPlayer().TogglePlayPause()
+				}
+				if err != nil {
+					m.renderError = err
 				}
 				m.renderMedia()
 				return m, m.scheduleRefresh()
@@ -105,10 +109,14 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 
 		case "left":
 			if isAudioMessage {
+				var err error
 				if m.externalAudioPlayer != nil {
-					m.externalAudioPlayer.SkipBackward(5 * time.Second)
+					err = m.externalAudioPlayer.SkipBackward(5 * time.Second)
 				} else {
-					m.audioRenderer.GetAudioPlayer().SkipBackward(5 * time.Second)
+					err = m.audioRenderer.GetAudioPlayer().SkipBackward(5 * time.Second)
+				}
+				if err != nil {
+					m.renderError = err
 				}
 				m.renderMedia()
 				return m, m.scheduleRefresh()
@@ -117,10 +125,14 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 
 		case "right":
 			if isAudioMessage {
+				var err error
 				if m.externalAudioPlayer != nil {
-					m.externalAudioPlayer.SkipForward(5 * time.Second)
+					err = m.externalAudioPlayer.SkipForward(5 * time.Second)
 				} else {
-					m.audioRenderer.GetAudioPlayer().SkipForward(5 * time.Second)
+					err = m.audioRenderer.GetAudioPlayer().SkipForward(5 * time.Second)
+				}
+				if err != nil {
+					m.renderError = err
 				}
 				m.renderMedia()
 				return m, m.scheduleRefresh()
@@ -129,10 +141,14 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 
 		case "up":
 			if isAudioMessage {
+				var err error
 				if m.externalAudioPlayer != nil {
-					m.externalAudioPlayer.VolumeUp()
+					err = m.externalAudioPlayer.VolumeUp()
 				} else {
-					m.audioRenderer.GetAudioPlayer().VolumeUp()
+					err = m.audioRenderer.GetAudioPlayer().VolumeUp()
+				}
+				if err != nil {
+					m.renderError = err
 				}
 				m.renderMedia()
 				return m, m.scheduleRefresh()
@@ -141,10 +157,14 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 
 		case "down":
 			if isAudioMessage {
+				var err error
 				if m.externalAudioPlayer != nil {
-					m.externalAudioPlayer.VolumeDown()
+					err = m.externalAudioPlayer.VolumeDown()
 				} else {
-					m.audioRenderer.GetAudioPlayer().VolumeDown()
+					err = m.audioRenderer.GetAudioPlayer().VolumeDown()
+				}
+				if err != nil {
+					m.renderError = err
 				}
 				m.renderMedia()
 				return m, m.scheduleRefresh()
@@ -154,10 +174,14 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 		// Speed control
 		case "[":
 			if isAudioMessage {
+				var err error
 				if m.externalAudioPlayer != nil {
-					m.externalAudioPlayer.SpeedDown()
+					err = m.externalAudioPlayer.SpeedDown()
 				} else {
-					m.audioRenderer.GetAudioPlayer().SpeedDown()
+					err = m.audioRenderer.GetAudioPlayer().SpeedDown()
+				}
+				if err != nil {
+					m.renderError = err
 				}
 				m.renderMedia()
 				return m, m.scheduleRefresh()
@@ -166,10 +190,14 @@ func (m *MediaViewerComponent) Update(msg tea.Msg) (*MediaViewerComponent, tea.C
 
 		case "]":
 			if isAudioMessage {
+				var err error
 				if m.externalAudioPlayer != nil {
-					m.externalAudioPlayer.SpeedUp()
+					err = m.externalAudioPlayer.SpeedUp()
 				} else {
-					m.audioRenderer.GetAudioPlayer().SpeedUp()
+					err = m.audioRenderer.GetAudioPlayer().SpeedUp()
+				}
+				if err != nil {
+					m.renderError = err
 				}
 				m.renderMedia()
 				return m, m.scheduleRefresh()

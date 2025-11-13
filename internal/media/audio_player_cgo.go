@@ -40,6 +40,7 @@ type AudioPlayer struct {
 	duration        time.Duration
 	speakerInit     bool
 	speakerInitOnce sync.Once
+	speakerInitError error  // Persistent init error for sync.Once pattern
 	position        time.Duration
 	ticker          *time.Ticker
 	stopTicker      chan bool
@@ -147,6 +148,10 @@ func (p *AudioPlayer) Play() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	if !p.speakerInit {
+		return fmt.Errorf("audio device not initialized: %v", p.speakerInitError)
+	}
+
 	if p.streamer == nil {
 		return fmt.Errorf("no audio file loaded")
 	}
@@ -184,6 +189,10 @@ func (p *AudioPlayer) Play() error {
 func (p *AudioPlayer) Pause() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if !p.speakerInit {
+		return fmt.Errorf("audio device not initialized: %v", p.speakerInitError)
+	}
 
 	if p.streamer == nil {
 		return fmt.Errorf("no audio file loaded")
@@ -483,17 +492,17 @@ func (p *AudioPlayer) Close() error {
 
 // initSpeaker initializes the speaker (only once globally).
 func (p *AudioPlayer) initSpeaker(sampleRate beep.SampleRate) error {
-	var initErr error
 	p.speakerInitOnce.Do(func() {
 		// Initialize speaker with buffer size of 1/10 second
 		err := speaker.Init(sampleRate, sampleRate.N(time.Second/10))
 		if err != nil {
-			initErr = err
+			p.speakerInitError = err  // Store error permanently for subsequent calls
 			return
 		}
 		p.speakerInit = true
 	})
-	return initErr
+	// Return the stored error (will be nil if init succeeded, or the error if it failed)
+	return p.speakerInitError
 }
 
 // startPositionTracking starts tracking playback position.
