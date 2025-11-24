@@ -17,8 +17,8 @@ func TestDefaultConfig(t *testing.T) {
 	if config.App.Name != "Ithil" {
 		t.Errorf("Expected app name 'Ithil', got '%s'", config.App.Name)
 	}
-	if config.App.Version != "0.1.3" {
-		t.Errorf("Expected version '0.1.3', got '%s'", config.App.Version)
+	if config.App.Version != "0.1.4" {
+		t.Errorf("Expected version '0.1.4', got '%s'", config.App.Version)
 	}
 
 	// Test UI layout defaults sum to 100
