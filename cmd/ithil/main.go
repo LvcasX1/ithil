@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	version     = "0.1.0"
+	version     = "0.1.3"
 	configPath  = flag.String("config", "", "Path to config file")
 	showVersion = flag.Bool("version", false, "Show version information")
 	showHelp    = flag.Bool("help", false, "Show help message")

@@ -114,7 +114,7 @@ func New(config *Config, logger *slog.Logger, ctx context.Context) (*Client, err
 		Device: telegram.DeviceConfig{
 			DeviceModel:    "Desktop",
 			SystemVersion:  "Linux",
-			AppVersion:     "0.1.0",
+			AppVersion:     "0.1.3",
 			SystemLangCode: "en",
 			LangPack:       "tdesktop",
 			LangCode:       "en",
