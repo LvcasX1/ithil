@@ -784,6 +784,33 @@ func (m *ConversationModel) SetCurrentChat(chat *types.Chat) {
 	}
 }
 
+// CurrentChatID returns the ID of the current chat, or 0 if no chat is selected.
+func (m *ConversationModel) CurrentChatID() int64 {
+	if m.currentChat == nil {
+		return 0
+	}
+	return m.currentChat.ID
+}
+
+// HasMessage checks if a message with the given ID exists in the current messages slice.
+func (m *ConversationModel) HasMessage(messageID int64) bool {
+	for _, msg := range m.messages {
+		if msg.ID == messageID {
+			return true
+		}
+	}
+	return false
+}
+
+// ReloadFromCache reloads messages from the cache for the current chat.
+// This is a fallback mechanism to ensure the UI stays in sync with cached data.
+func (m *ConversationModel) ReloadFromCache() {
+	if m.currentChat == nil || m.cache == nil {
+		return
+	}
+	m.loadMessages()
+}
+
 // SetMessages sets the messages for the current chat.
 func (m *ConversationModel) SetMessages(messages []*types.Message) {
 	m.messages = messages

@@ -130,6 +130,14 @@ func (m *MainModel) Init() tea.Cmd {
 func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	// CRITICAL: Always process telegram updates, even when modals are visible
+	// This prevents losing messages when help or settings modal is open
+	if tgMsg, ok := msg.(telegramUpdateMsg); ok {
+		updateCmds := m.processUpdate(tgMsg.update)
+		updateCmds = append(updateCmds, m.waitForUpdate())
+		return m, tea.Batch(updateCmds...)
+	}
+
 	// Handle help modal updates when visible
 	if m.helpModal.IsVisible() {
 		var cmd tea.Cmd
@@ -359,15 +367,8 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Return to trigger a full re-render
 		return m, cmd
 
-	case telegramUpdateMsg:
-		// Process the update - returns commands for UI updates
-		updateCmds := m.processUpdate(msg.update)
-
-		// Immediately spawn another goroutine to wait for the next update
-		// This ensures we're always listening without blocking
-		updateCmds = append(updateCmds, m.waitForUpdate())
-
-		return m, tea.Batch(updateCmds...)
+	// Note: telegramUpdateMsg is handled at the top of Update() to ensure
+	// updates are processed even when modals are visible
 
 	case clearStatusMsg:
 		m.statusBar.ClearMessage()
@@ -814,6 +815,26 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 		message := update.Message
 		chatID := update.ChatID
 
+		// Use conversation's currentChatID for more reliable comparison
+		// This avoids potential staleness issues with m.currentChat
+		conversationChatID := m.conversation.CurrentChatID()
+
+		// DEBUG: Log the comparison values to diagnose intermittent display issues
+		if f, err := os.OpenFile("/tmp/ithil-updates.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			fmt.Fprintf(f, "[%s] NewMessage: updateChatID=%d, conversationChatID=%d, mainCurrentChatID=%v, match=%v\n",
+				time.Now().Format("15:04:05"),
+				chatID,
+				conversationChatID,
+				func() interface{} {
+					if m.currentChat != nil {
+						return m.currentChat.ID
+					}
+					return "nil"
+				}(),
+				conversationChatID == chatID)
+			f.Close()
+		}
+
 		// Check if message already exists in cache (from optimistic UI)
 		// This prevents duplicate messages when server confirms our sent message
 		existingMsg, exists := m.cache.GetMessage(chatID, message.ID)
@@ -823,11 +844,24 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 			m.cache.AddMessage(chatID, message)
 
 			// If this chat is currently open, add to UI
-			if m.currentChat != nil && m.currentChat.ID == chatID {
+			// Use conversation's chat ID for comparison (more reliable than m.currentChat)
+			if conversationChatID == chatID {
 				m.conversation.AddMessage(message)
 
 				// Update sidebar with new message
-				m.sidebar.SetCurrentChat(m.currentChat)
+				if m.currentChat != nil {
+					m.sidebar.SetCurrentChat(m.currentChat)
+				}
+
+				// Fallback: verify message was added, reload from cache if not
+				if !m.conversation.HasMessage(message.ID) {
+					if f, err := os.OpenFile("/tmp/ithil-updates.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+						fmt.Fprintf(f, "[%s] WARNING: Message %d not found after AddMessage, reloading from cache\n",
+							time.Now().Format("15:04:05"), message.ID)
+						f.Close()
+					}
+					m.conversation.ReloadFromCache()
+				}
 
 				// Return a command that sends a no-op message to trigger re-render
 				cmds = append(cmds, func() tea.Msg {
@@ -847,7 +881,8 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 			if !message.IsOutgoing {
 				chat.UnreadCount++
 				// Mark chat with new message flag if not currently viewing it
-				if m.currentChat == nil || m.currentChat.ID != chatID {
+				// Use conversationChatID for consistent comparison
+				if conversationChatID != chatID {
 					chat.HasNewMessage = true
 					m.cache.SetChat(chat)
 					// Move chat to top of list
@@ -857,7 +892,8 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 			m.chatList.UpdateChat(chat)
 
 			// Update sidebar if this is the current chat
-			if m.currentChat != nil && m.currentChat.ID == chatID {
+			// Use conversationChatID for consistent comparison
+			if conversationChatID == chatID {
 				m.currentChat = chat
 				m.sidebar.SetCurrentChat(chat)
 			}
@@ -873,7 +909,8 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 			chatID := update.ChatID
 
 			// Update in conversation if open
-			if m.currentChat != nil && m.currentChat.ID == chatID {
+			// Use conversation's chat ID for reliable comparison
+			if m.conversation.CurrentChatID() == chatID {
 				m.conversation.UpdateMessage(message.ID, message.Content.Text)
 			}
 
@@ -890,7 +927,8 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 			chatID := update.ChatID
 
 			// Remove from conversation if open
-			if m.currentChat != nil && m.currentChat.ID == chatID {
+			// Use conversation's chat ID for reliable comparison
+			if m.conversation.CurrentChatID() == chatID {
 				m.conversation.RemoveMessage(messageID)
 			}
 
