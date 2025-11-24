@@ -113,7 +113,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		App: AppConfig{
 			Name:    "Ithil",
-			Version: "0.1.3",
+			Version: "0.1.4",
 		},
 		Telegram: TelegramConfig{
 			UseDefaultCredentials: true, // Default to built-in credentials
