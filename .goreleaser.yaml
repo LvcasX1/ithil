@@ -48,7 +48,6 @@ archives:
     files:
       - LICENSE
       - README.md
-      - CHANGELOG.md
       - config.example.yaml
 
 checksum:
