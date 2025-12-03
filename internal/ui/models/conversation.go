@@ -904,7 +904,13 @@ func (m *ConversationModel) ClearReplyEdit() {
 }
 
 // AddMessage adds a message to the conversation.
+// It checks for duplicates to prevent the same message from appearing twice.
 func (m *ConversationModel) AddMessage(message *types.Message) {
+	// Prevent duplicate messages
+	if m.HasMessage(message.ID) {
+		return
+	}
+
 	m.messages = append(m.messages, message)
 	// Keep selection on the same message by index (it will shift as new messages arrive)
 	// If selection is at last message, move it to the new last message
