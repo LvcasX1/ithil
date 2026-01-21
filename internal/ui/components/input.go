@@ -2,10 +2,9 @@
 package components
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lvcasx1/ithil/internal/ui/styles"
@@ -13,7 +12,7 @@ import (
 
 // InputComponent represents the message input field.
 type InputComponent struct {
-	textInput     textinput.Model
+	textArea      textarea.Model
 	Width         int
 	Height        int
 	ReplyToID     int64
@@ -24,29 +23,32 @@ type InputComponent struct {
 
 // NewInputComponent creates a new input component.
 func NewInputComponent(width, height int) *InputComponent {
-	ti := textinput.New()
-	ti.Placeholder = "Type a message..."
+	ta := textarea.New()
+	ta.Placeholder = "Type a message..."
 	// Do NOT focus by default - only focus when explicitly requested
-	ti.CharLimit = 4096 // Telegram message limit
-	ti.Width = width - 4
+	ta.CharLimit = 4096 // Telegram message limit
+	ta.SetWidth(width - 2)
+	ta.SetHeight(1) // Start with minimal height, will expand dynamically
+	ta.ShowLineNumbers = false
+	ta.KeyMap.InsertNewline.SetEnabled(false) // Enter sends message, not newline
 
 	return &InputComponent{
-		textInput: ti,
-		Width:     width,
-		Height:    height,
-		Focused:   false, // Start unfocused to prevent input context bleed
+		textArea: ta,
+		Width:    width,
+		Height:   2, // Minimal initial height (border + 1 line)
+		Focused:  false, // Start unfocused to prevent input context bleed
 	}
 }
 
 // Init initializes the input component.
 func (i *InputComponent) Init() tea.Cmd {
-	return textinput.Blink
+	return textarea.Blink
 }
 
 // Update handles input component updates.
 func (i *InputComponent) Update(msg tea.Msg) (*InputComponent, tea.Cmd) {
 	var cmd tea.Cmd
-	i.textInput, cmd = i.textInput.Update(msg)
+	i.textArea, cmd = i.textArea.Update(msg)
 	return i, cmd
 }
 
@@ -54,42 +56,17 @@ func (i *InputComponent) Update(msg tea.Msg) (*InputComponent, tea.Cmd) {
 func (i *InputComponent) View() string {
 	var sb strings.Builder
 
-	// Calculate available content height
-	// InputBoxStyle has: BorderTop (1) = 1 line overhead
-	// Available content lines = Height - 1
-	availableLines := i.Height - 1
-	if availableLines < 1 {
-		availableLines = 1 // Always show at least the input
-	}
-
-	linesUsed := 0
-
-	// Reply/Edit/Attachment indicator (if space available)
-	if (i.ReplyToID != 0 || i.EditMessageID != 0 || i.AttachedFile != "") && linesUsed < availableLines {
+	// Reply/Edit/Attachment indicator
+	if i.ReplyToID != 0 || i.EditMessageID != 0 || i.AttachedFile != "" {
 		indicator := i.renderIndicator()
 		sb.WriteString(indicator)
-		linesUsed++
-		if linesUsed < availableLines {
-			sb.WriteString("\n")
-		}
-	}
-
-	// Input field with prefix icon (always show)
-	if linesUsed < availableLines {
-		inputLine := i.renderInputLine()
-		sb.WriteString(inputLine)
-		linesUsed++
-	}
-
-	// Help text (if space available)
-	help := i.renderHelp()
-	if help != "" && linesUsed < availableLines {
 		sb.WriteString("\n")
-		sb.WriteString(help)
-		linesUsed++
 	}
 
-	// Apply container style with exact height and enhanced border
+	// Input field (textarea)
+	sb.WriteString(i.textArea.View())
+
+	// Apply container style (border + width, no fixed height)
 	containerStyle := i.getContainerStyle()
 	return containerStyle.Render(sb.String())
 }
@@ -142,85 +119,13 @@ func (i *InputComponent) renderIndicator() string {
 	return strings.Join(indicators, separator)
 }
 
-// renderHelp renders help text with visual separators.
-func (i *InputComponent) renderHelp() string {
-	if !i.Focused {
-		return ""
-	}
-
-	// Create help items with icons
-	helpItems := []string{
-		"⏎ Send",
-		"Ctrl+A Attach",
-		"Ctrl+X Remove",
-		"Esc Cancel",
-	}
-
-	separator := styles.DimStyle.Render(" │ ")
-	helpText := strings.Join(helpItems, separator)
-	return styles.DimStyle.Render(helpText)
-}
-
-// renderInputLine renders the input field with a visual prefix.
-func (i *InputComponent) renderInputLine() string {
-	// Add input prefix based on state
-	var prefix string
-	var prefixStyle lipgloss.Style
-
-	if i.Focused {
-		prefix = "✎"
-		prefixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.AccentCyan)).Bold(true)
-	} else {
-		prefix = "○"
-		prefixStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(styles.TextSecondary))
-	}
-
-	// Get character count info
-	charInfo := i.getCharacterInfo()
-
-	// Combine prefix + input + char info
-	styledPrefix := prefixStyle.Render(prefix + " ")
-	inputView := i.textInput.View()
-
-	return styledPrefix + inputView + charInfo
-}
-
-// getCharacterInfo returns character count information when focused.
-func (i *InputComponent) getCharacterInfo() string {
-	if !i.Focused {
-		return ""
-	}
-
-	charCount := len(i.textInput.Value())
-	charLimit := i.textInput.CharLimit
-
-	// Only show when approaching limit or when there's content
-	if charCount == 0 {
-		return ""
-	}
-
-	// Different styling based on how close to limit
-	var charStyle lipgloss.Style
-	percentage := float64(charCount) / float64(charLimit) * 100
-
-	if percentage >= 90 {
-		charStyle = styles.ErrorStyle
-	} else if percentage >= 75 {
-		charStyle = styles.WarningStyle
-	} else {
-		charStyle = styles.DimStyle
-	}
-
-	info := fmt.Sprintf(" %d/%d", charCount, charLimit)
-	return charStyle.Render(info)
-}
-
 // getContainerStyle returns the appropriate container style based on focus state.
+// Note: We intentionally do NOT set Height() here - let content determine height naturally.
+// Setting a fixed height causes clipping/padding issues with the textarea.
 func (i *InputComponent) getContainerStyle() lipgloss.Style {
 	baseStyle := lipgloss.NewStyle().
 		BorderTop(true).
-		Width(i.Width - 2).
-		Height(i.Height)
+		Width(i.Width - 2)
 
 	if i.Focused {
 		// Enhanced border when focused
@@ -237,17 +142,17 @@ func (i *InputComponent) getContainerStyle() lipgloss.Style {
 
 // GetValue returns the current input value.
 func (i *InputComponent) GetValue() string {
-	return i.textInput.Value()
+	return i.textArea.Value()
 }
 
 // SetValue sets the input value.
 func (i *InputComponent) SetValue(value string) {
-	i.textInput.SetValue(value)
+	i.textArea.SetValue(value)
 }
 
 // Clear clears the input value.
 func (i *InputComponent) Clear() {
-	i.textInput.SetValue("")
+	i.textArea.Reset()
 	i.ReplyToID = 0
 	i.EditMessageID = 0
 	i.AttachedFile = ""
@@ -278,29 +183,44 @@ func (i *InputComponent) CancelReplyOrEdit() {
 // Focus focuses the input component.
 func (i *InputComponent) Focus() tea.Cmd {
 	i.Focused = true
-	return i.textInput.Focus()
+	return i.textArea.Focus()
 }
 
 // Blur blurs the input component.
 func (i *InputComponent) Blur() {
 	i.Focused = false
-	i.textInput.Blur()
+	i.textArea.Blur()
 }
 
 // SetWidth sets the width of the input component.
 func (i *InputComponent) SetWidth(width int) {
 	i.Width = width
-	i.textInput.Width = width - 4
+	i.textArea.SetWidth(width - 2)
 }
 
 // SetHeight sets the height of the input component.
 func (i *InputComponent) SetHeight(height int) {
 	i.Height = height
+
+	// Calculate overhead: border (1) + indicator (0-1)
+	// Char count is inline with border, not extra line
+	overhead := 1 // border
+
+	hasIndicator := i.ReplyToID != 0 || i.EditMessageID != 0 || i.AttachedFile != ""
+	if hasIndicator {
+		overhead++
+	}
+
+	taHeight := height - overhead
+	if taHeight < 1 {
+		taHeight = 1
+	}
+	i.textArea.SetHeight(taHeight)
 }
 
 // IsEmpty returns true if the input is empty.
 func (i *InputComponent) IsEmpty() bool {
-	return strings.TrimSpace(i.textInput.Value()) == ""
+	return strings.TrimSpace(i.textArea.Value()) == ""
 }
 
 // SetAttachment sets a file attachment for sending media.
@@ -322,3 +242,53 @@ func (i *InputComponent) HasAttachment() bool {
 func (i *InputComponent) ClearAttachment() {
 	i.AttachedFile = ""
 }
+
+// CalculateRequiredHeight calculates the height needed to display all content.
+// Returns the number of lines needed (minimum 2, maximum maxHeight).
+// This includes: border (1) + indicator (0-1) + text lines
+func (i *InputComponent) CalculateRequiredHeight(maxHeight int) int {
+	totalHeight := 1 // border
+
+	hasIndicator := i.ReplyToID != 0 || i.EditMessageID != 0 || i.AttachedFile != ""
+	if hasIndicator {
+		totalHeight++
+	}
+
+	text := i.textArea.Value()
+	if text == "" {
+		totalHeight++ // placeholder line
+	} else {
+		// Get the textarea's actual width for accurate wrapping calculation
+		textareaWidth := i.textArea.Width()
+		if textareaWidth < 1 {
+			textareaWidth = i.Width - 2 // fallback
+		}
+
+		// Split by hard line breaks first
+		hardLines := strings.Split(text, "\n")
+		for _, line := range hardLines {
+			if line == "" {
+				totalHeight++
+				continue
+			}
+			// Calculate soft-wrapped lines for this hard line
+			lineWidth := lipgloss.Width(line)
+			wrappedLines := (lineWidth + textareaWidth - 1) / textareaWidth
+			if wrappedLines < 1 {
+				wrappedLines = 1
+			}
+			totalHeight += wrappedLines
+		}
+	}
+
+	// Clamp
+	if totalHeight < 2 {
+		totalHeight = 2
+	}
+	if totalHeight > maxHeight {
+		totalHeight = maxHeight
+	}
+
+	return totalHeight
+}
+

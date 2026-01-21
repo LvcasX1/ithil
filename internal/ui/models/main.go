@@ -62,6 +62,9 @@ type MainModel struct {
 	audioPlayingFile  string         // Path to current audio file
 	audioPlayingChat  int64          // Chat ID where audio is from
 	audioMessage      *types.Message // Message containing the audio
+
+	// Deduplication: track recently sent messages to prevent duplicates from updates
+	pendingSentMessages map[int64]time.Time // message ID -> sent time
 }
 
 // NewMainModel creates a new main model.
@@ -110,6 +113,9 @@ func NewMainModel(config *app.Config, client *telegram.Client) *MainModel {
 
 		// Use the same global audio player instance
 		globalAudioPlayer: globalPlayer,
+
+		// Initialize deduplication map for sent messages
+		pendingSentMessages: make(map[int64]time.Time),
 	}
 }
 
@@ -317,6 +323,13 @@ func (m *MainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case messageSentMsg:
+		// Track this message as recently sent to prevent duplicate from updates
+		// This handles the race condition where UpdateNewMessage arrives before/after
+		// this handler processes, causing the message to appear twice
+		if msg.message.ID != 0 {
+			m.pendingSentMessages[msg.message.ID] = time.Now()
+		}
+
 		// Optimistic UI: Add message immediately for instant display
 		// This prevents the delay when server confirmation arrives later
 		m.cache.AddMessage(msg.chatID, msg.message)
@@ -833,6 +846,19 @@ func (m *MainModel) processUpdate(update *types.Update) []tea.Cmd {
 				}(),
 				conversationChatID == chatID)
 			f.Close()
+		}
+
+		// Check if this is a message we just sent (dedup window of 5 seconds)
+		// This handles the race condition where the update arrives before/after
+		// the messageSentMsg is processed by bubbletea's event loop
+		if sentTime, wasSent := m.pendingSentMessages[message.ID]; wasSent {
+			if time.Since(sentTime) < 5*time.Second {
+				// This is our own message coming back via update, skip it
+				delete(m.pendingSentMessages, message.ID)
+				break
+			}
+			// Expired entry, clean it up
+			delete(m.pendingSentMessages, message.ID)
 		}
 
 		// Check if message already exists in cache (from optimistic UI)

@@ -49,3 +49,7 @@ build-errors.log
 # GoReleaser
 dist/
 goreleaser.log
+
+# Claude
+CLAUDE.md
+.claude/

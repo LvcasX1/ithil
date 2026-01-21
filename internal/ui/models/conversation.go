@@ -297,6 +297,7 @@ func (m *ConversationModel) handleInputKeys(msg tea.KeyMsg) (*ConversationModel,
 		// Clear reply/edit state and unfocus input
 		m.ClearReplyEdit()
 		m.input.Blur()
+		m.recalculateLayout()
 		return m, nil
 	case "ctrl+a":
 		// Attach file - prompt for file path
@@ -306,6 +307,7 @@ func (m *ConversationModel) handleInputKeys(msg tea.KeyMsg) (*ConversationModel,
 	case "ctrl+x":
 		// Remove attachment
 		m.input.ClearAttachment()
+		m.recalculateLayout()
 		return m, nil
 	case "enter":
 		// Check if we're editing or sending
@@ -316,6 +318,8 @@ func (m *ConversationModel) handleInputKeys(msg tea.KeyMsg) (*ConversationModel,
 	default:
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
+		// Recalculate layout after input content changes
+		m.recalculateLayout()
 		return m, cmd
 	}
 }
@@ -716,6 +720,7 @@ func (m *ConversationModel) sendMessage() tea.Cmd {
 	// Clear input and reply state immediately for better UX
 	m.input.Clear()
 	m.ClearReplyEdit()
+	m.recalculateLayout()
 	m.sendingMessage = true
 
 	return func() tea.Msg {
@@ -754,6 +759,7 @@ func (m *ConversationModel) editMessage() tea.Cmd {
 	// Clear input and edit state immediately
 	m.input.Clear()
 	m.ClearReplyEdit()
+	m.recalculateLayout()
 
 	return func() tea.Msg {
 		err := m.client.EditMessage(currentChat, messageID, text)
@@ -775,6 +781,7 @@ func (m *ConversationModel) SetCurrentChat(chat *types.Chat) {
 	m.input.Blur()
 	m.input.Clear()
 	m.ClearReplyEdit()
+	m.recalculateLayout()
 	m.loadMessages()
 	// Reset selection to last message
 	if len(m.messages) > 0 {
@@ -830,29 +837,11 @@ func (m *ConversationModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 
-	// Calculate viewport height
-	// Layout breakdown (from renderConversationView):
-	// - Top border with header: 1 line
-	// - Viewport content with side borders: viewportHeight lines
-	// - Bottom border: 1 line
-	// - Typing indicator: 0-1 lines (reserve 1 to prevent layout shift)
-	// - Input box: 4 lines (includes border only, no padding)
-	// Total: 1 + viewportHeight + 1 + 1 + 4 = viewportHeight + 7
-	// Therefore: viewportHeight = height - 7
-
-	inputHeight := 4   // Input box total height (border + 3 content lines)
-	borderLines := 2   // Top border (1) + Bottom border (1)
-	typingHeight := 1  // Reserve space for typing indicator to prevent overflow
-
-	viewportHeight := height - inputHeight - borderLines - typingHeight
-	if viewportHeight < 1 {
-		viewportHeight = 1
-	}
-
-	m.viewport.Width = width - 4 // Account for borders and horizontal padding
-	m.viewport.Height = viewportHeight
+	// Set input width first so it can calculate required height
 	m.input.SetWidth(width - 2)
-	m.input.SetHeight(inputHeight)
+
+	// Recalculate layout with dynamic input height
+	m.recalculateLayout()
 
 	// Update media viewer size
 	viewerWidth := width - 20
@@ -866,6 +855,41 @@ func (m *ConversationModel) SetSize(width, height int) {
 	m.mediaViewer.SetSize(viewerWidth, viewerHeight)
 
 	m.updateViewport()
+}
+
+// recalculateLayout adjusts viewport and input heights based on input content.
+func (m *ConversationModel) recalculateLayout() {
+	// Layout breakdown:
+	// - Top border with header: 1 line
+	// - Viewport content with side borders: viewportHeight lines
+	// - Bottom border: 1 line
+	// - Typing indicator: 0-1 line (only when someone is typing)
+	// - Input box: dynamic height (min 2, max 10)
+
+	borderLines := 2 // Top border (1) + Bottom border (1)
+
+	// Only reserve space for typing indicator when actually needed
+	typingHeight := 0
+	if len(m.GetTypingUsers()) > 0 {
+		typingHeight = 1
+	}
+
+	// Calculate dynamic input height (min 2, max 10 lines)
+	maxInputHeight := 10
+	minInputHeight := 2
+	inputHeight := m.input.CalculateRequiredHeight(maxInputHeight)
+	if inputHeight < minInputHeight {
+		inputHeight = minInputHeight
+	}
+
+	viewportHeight := m.height - inputHeight - borderLines - typingHeight
+	if viewportHeight < 1 {
+		viewportHeight = 1
+	}
+
+	m.viewport.Width = m.width - 4 // Account for borders and horizontal padding
+	m.viewport.Height = viewportHeight
+	m.input.SetHeight(inputHeight)
 }
 
 // SetFocused sets the focused state.
@@ -887,6 +911,7 @@ func (m *ConversationModel) SetReplyTo(message *types.Message) {
 	m.replyToMessage = message
 	m.editingMessage = nil
 	m.input.SetReplyTo(message.ID)
+	m.recalculateLayout()
 }
 
 // SetEditing sets the message to edit.
@@ -894,6 +919,7 @@ func (m *ConversationModel) SetEditing(message *types.Message) {
 	m.editingMessage = message
 	m.replyToMessage = nil
 	m.input.SetEdit(message.ID, message.Content.Text)
+	m.recalculateLayout()
 }
 
 // ClearReplyEdit clears reply and edit state.

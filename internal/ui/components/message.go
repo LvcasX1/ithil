@@ -213,13 +213,63 @@ func (m *MessageComponent) renderContent() string {
 
 // renderTextContent renders text content with formatting entities.
 func (m *MessageComponent) renderTextContent(text string, entities []types.MessageEntity) string {
-	if len(entities) == 0 {
+	// Calculate available width for text (accounting for indentation)
+	// Content is indented by 4 spaces, plus some margin for borders
+	availableWidth := m.Width - 8
+	if availableWidth < 20 {
+		availableWidth = 20 // Minimum readable width
+	}
+
+	// Wrap the text to fit within available width
+	wrappedText := wrapText(text, availableWidth)
+
+	// TODO: Implement proper entity rendering
+	return wrappedText
+}
+
+// wrapText wraps text to fit within the specified width.
+// It preserves existing line breaks and wraps long lines at word boundaries.
+func wrapText(text string, width int) string {
+	if width <= 0 || text == "" {
 		return text
 	}
 
-	// TODO: Implement proper entity rendering
-	// For now, just return the plain text
-	return text
+	var result strings.Builder
+	lines := strings.Split(text, "\n")
+
+	for i, line := range lines {
+		if i > 0 {
+			result.WriteString("\n")
+		}
+
+		// If line fits, add it as-is
+		if lipgloss.Width(line) <= width {
+			result.WriteString(line)
+			continue
+		}
+
+		// Wrap long line at word boundaries
+		words := strings.Fields(line)
+		if len(words) == 0 {
+			continue
+		}
+
+		currentLine := words[0]
+		for _, word := range words[1:] {
+			testLine := currentLine + " " + word
+			if lipgloss.Width(testLine) <= width {
+				currentLine = testLine
+			} else {
+				result.WriteString(currentLine)
+				result.WriteString("\n")
+				// If single word exceeds width, we still need to include it
+				currentLine = word
+			}
+		}
+		result.WriteString(currentLine)
+	}
+
+	return result.String()
 }
 
 // renderMediaContent renders media content with caption and preview.
