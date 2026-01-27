@@ -907,17 +907,26 @@ func (c *Client) extractMessageFromUpdates(updates tg.UpdatesClass, chatID int64
 	case *tg.Updates:
 		// Look for the new message in updates
 		for _, update := range u.Updates {
-			if msg, ok := update.(*tg.UpdateNewMessage); ok {
+			var message *tg.Message
+			switch msg := update.(type) {
+			case *tg.UpdateNewMessage:
 				if m, ok := msg.Message.(*tg.Message); ok {
-					// Create user map from users in the update
-					userMap := make(map[int64]*tg.User)
-					for _, user := range u.Users {
-						if usr, ok := user.(*tg.User); ok {
-							userMap[usr.ID] = usr
-						}
-					}
-					return c.convertMessage(m, userMap, chatID), nil
+					message = m
 				}
+			case *tg.UpdateNewChannelMessage:
+				if m, ok := msg.Message.(*tg.Message); ok {
+					message = m
+				}
+			}
+			if message != nil {
+				// Create user map from users in the update
+				userMap := make(map[int64]*tg.User)
+				for _, user := range u.Users {
+					if usr, ok := user.(*tg.User); ok {
+						userMap[usr.ID] = usr
+					}
+				}
+				return c.convertMessage(message, userMap, chatID), nil
 			}
 		}
 		return nil, fmt.Errorf("no message found in updates")

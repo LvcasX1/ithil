@@ -390,33 +390,37 @@ func (m *ChatListModel) updateViewport() {
 	content := m.renderAllChats()
 	m.viewport.SetContent(content)
 
-	// Calculate line position to scroll to selected item
-	// Each chat item is 4 lines total:
-	// - Top border line (1 line)
-	// - Title line (1 line)
-	// - Preview + metadata combined line (1 line)
-	// - Bottom border line (1 line)
-	// Note: ALL items have borders (selected = visible, unselected = invisible)
-	// This ensures consistent dimensions and prevents visual shifting
-	if m.selectedIndex >= 0 && m.selectedIndex < len(m.chats) {
-		linePos := m.selectedIndex * 4
+	activeChats := m.getActiveChats()
+	if m.selectedIndex >= 0 && m.selectedIndex < len(activeChats) {
+		// Calculate actual item height by measuring a rendered sample
+		// This accounts for Lipgloss borders, margins, and content variations
+		itemHeight := 4 // default fallback
+		if len(activeChats) > 0 {
+			sampleChat := activeChats[0]
+			sampleItem := components.NewChatItemComponent(sampleChat, false, m.focused, m.viewport.Width)
+			renderedSample := sampleItem.Render()
+			itemHeight = strings.Count(renderedSample, "\n") + 1
+		}
+
+		linePos := m.selectedIndex * itemHeight
 		targetOffset := linePos
 
-		// Optimized scrolling: Keep selected item visible with smooth transitions
-		// Add padding to keep selected item away from edges for better visibility
-		visiblePadding := 1 // Keep 1 item visible above/below when possible
-
 		if targetOffset < m.viewport.YOffset {
-			// Scrolling up
-			m.viewport.YOffset = targetOffset - (visiblePadding * 4)
+			// Scrolling up: position so selected item is at top
+			m.viewport.YOffset = targetOffset
 			if m.viewport.YOffset < 0 {
 				m.viewport.YOffset = 0
 			}
-		} else if targetOffset >= m.viewport.YOffset+m.viewport.Height {
-			// Scrolling down
-			m.viewport.YOffset = targetOffset - m.viewport.Height + 4 + (visiblePadding * 4)
-			if m.viewport.YOffset < 0 {
-				m.viewport.YOffset = 0
+		} else {
+			// Check if the selected item would be outside the viewport
+			itemBottom := linePos + itemHeight
+			viewportBottom := m.viewport.YOffset + m.viewport.Height
+			if itemBottom > viewportBottom {
+				// Scrolling down: ensure the item's bottom edge is visible
+				m.viewport.YOffset = itemBottom - m.viewport.Height
+				if m.viewport.YOffset < 0 {
+					m.viewport.YOffset = 0
+				}
 			}
 		}
 	}

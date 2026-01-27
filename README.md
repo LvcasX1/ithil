@@ -1,6 +1,6 @@
 # Ithil
 
-![Version](https://img.shields.io/badge/version-0.1.2-blue)
+![Version](https://img.shields.io/badge/version-0.1.7-blue)
 ![Go Version](https://img.shields.io/badge/go-1.23%2B-00ADD8)
 ![License](https://img.shields.io/badge/license-MIT-green)
 

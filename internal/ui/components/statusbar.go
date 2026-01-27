@@ -44,7 +44,7 @@ func NewStatusBarComponent(width int) *StatusBarComponent {
 	return &StatusBarComponent{
 		Width:            width,
 		ConnectionStatus: StatusDisconnected,
-		AppVersion:       "0.1.4",
+		AppVersion:       "0.1.7",
 	}
 }
 
