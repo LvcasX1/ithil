@@ -113,6 +113,8 @@ pub enum Action {
     Forward,
     /// Cancel the current action
     CancelAction,
+    /// Open/view media (photo, video, document)
+    OpenMedia,
 
     // =========================================================================
     // Input Actions
@@ -165,6 +167,7 @@ impl std::fmt::Display for Action {
             Self::Delete => write!(f, "Delete"),
             Self::Forward => write!(f, "Forward"),
             Self::CancelAction => write!(f, "Cancel"),
+            Self::OpenMedia => write!(f, "Open Media"),
             Self::Backspace => write!(f, "Backspace"),
             Self::DeleteChar => write!(f, "Delete Char"),
             Self::ScrollUp => write!(f, "Scroll Up"),
@@ -277,6 +280,7 @@ impl KeyMap {
         bindings.insert(key(KeyCode::Char('e'), none()), Action::Edit);
         bindings.insert(key(KeyCode::Char('x'), none()), Action::Delete);
         bindings.insert(key(KeyCode::Char('f'), none()), Action::Forward);
+        bindings.insert(key(KeyCode::Char('o'), none()), Action::OpenMedia);
     }
 
     /// Add standard key bindings.
@@ -284,6 +288,7 @@ impl KeyMap {
         bindings.insert(key(KeyCode::Char('f'), ctrl()), Action::SearchChats);
         bindings.insert(key(KeyCode::Char('r'), ctrl()), Action::Reply);
         bindings.insert(key(KeyCode::Char('e'), ctrl()), Action::Edit);
+        bindings.insert(key(KeyCode::Char('o'), ctrl()), Action::OpenMedia);
         bindings.insert(key(KeyCode::F(5), none()), Action::MarkAsRead);
         bindings.insert(key(KeyCode::F(2), none()), Action::PinChat);
         bindings.insert(key(KeyCode::F(3), none()), Action::MuteChat);
@@ -361,6 +366,7 @@ impl KeyMap {
                 ("e", "Edit"),
                 ("x", "Delete"),
                 ("f", "Forward"),
+                ("o", "Open media"),
                 ("p", "Pin/unpin"),
                 ("m", "Mute/unmute"),
                 ("Tab", "Next pane"),
@@ -378,6 +384,7 @@ impl KeyMap {
                 ("Ctrl+F", "Search"),
                 ("Ctrl+R", "Reply"),
                 ("Ctrl+E", "Edit"),
+                ("Ctrl+O", "Open media"),
                 ("F2", "Pin/unpin"),
                 ("F3", "Mute/unmute"),
                 ("F5", "Mark as read"),

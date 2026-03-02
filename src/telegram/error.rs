@@ -79,9 +79,21 @@ pub enum TelegramError {
     #[error("Message not found: {0}")]
     MessageNotFound(i64),
 
+    /// The message does not contain any media.
+    #[error("Message {0} does not contain media")]
+    NoMedia(i64),
+
+    /// The message does not contain a photo.
+    #[error("Message {0} is not a photo")]
+    NotAPhoto(i64),
+
+    /// The requested file was not found.
+    #[error("File not found: {0}")]
+    FileNotFound(std::path::PathBuf),
+
     /// IO error during file operations.
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(String),
 
     /// Internal error that should not occur in normal operation.
     #[error("Internal error: {0}")]
@@ -135,28 +147,28 @@ impl From<grammers_client::InvocationError> for TelegramError {
                 match error_message {
                     "PHONE_NUMBER_INVALID" => {
                         Self::InvalidPhoneNumber("Phone number format is invalid".into())
-                    }
+                    },
                     "PHONE_CODE_INVALID" | "PHONE_CODE_EXPIRED" | "PHONE_CODE_EMPTY" => {
                         Self::InvalidCode
-                    }
+                    },
                     "PASSWORD_HASH_INVALID" => Self::InvalidPassword,
                     "SESSION_PASSWORD_NEEDED" => Self::PasswordRequired,
                     "AUTH_KEY_UNREGISTERED" | "USER_DEACTIVATED" | "USER_DEACTIVATED_BAN" => {
                         Self::AuthRequired
-                    }
+                    },
                     _ => Self::Api(error_message.to_string()),
                 }
-            }
+            },
             InvocationError::Io(io_err) => Self::Network(io_err.to_string()),
             InvocationError::Dropped => Self::Internal("Request was dropped".into()),
             InvocationError::Deserialize(err) => {
                 Self::Internal(format!("Deserialize error: {}", err))
-            }
+            },
             InvocationError::Transport(err) => Self::Network(format!("Transport error: {}", err)),
             InvocationError::InvalidDc => Self::Internal("Invalid datacenter".into()),
             InvocationError::Authentication(err) => {
                 Self::Internal(format!("Authentication error: {}", err))
-            }
+            },
         }
     }
 }
@@ -172,6 +184,12 @@ impl From<grammers_client::SignInError> for TelegramError {
             SignInError::InvalidPassword(_) => Self::InvalidPassword,
             SignInError::Other(invocation_error) => invocation_error.into(),
         }
+    }
+}
+
+impl From<std::io::Error> for TelegramError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err.to_string())
     }
 }
 

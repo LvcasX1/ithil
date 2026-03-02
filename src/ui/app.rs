@@ -129,6 +129,8 @@ pub enum AppAction {
     EditMessage(i64, i64, String),
     /// Delete a message
     DeleteMessage(i64, i64),
+    /// Open media (download if needed and open with system viewer)
+    OpenMedia(i64, i64),
 }
 
 /// The main TUI application.
@@ -506,6 +508,9 @@ impl App {
             AppAction::DeleteMessage(chat_id, message_id) => {
                 self.handle_delete_message(chat_id, message_id).await;
             },
+            AppAction::OpenMedia(chat_id, message_id) => {
+                self.handle_open_media(chat_id, message_id).await;
+            },
             // Quit and Forward are already handled by setting should_quit in handle_key
             AppAction::Quit | AppAction::Forward(_) => {},
         }
@@ -570,6 +575,55 @@ impl App {
             },
             Err(e) => {
                 self.set_status_message(format!("Failed to delete message: {e}"));
+            },
+        }
+    }
+
+    /// Handle opening media from a message.
+    ///
+    /// Downloads the media if not already downloaded, then opens it with the system viewer.
+    async fn handle_open_media(&mut self, chat_id: i64, message_id: i64) {
+        use crate::telegram::TelegramClient;
+        use crate::types::MessageType;
+
+        // Get the message from cache
+        let message = self
+            .cache
+            .get_messages(chat_id)
+            .into_iter()
+            .find(|m| m.id == message_id);
+
+        let Some(message) = message else {
+            self.set_status_message("Message not found".to_string());
+            return;
+        };
+
+        // Check if it's a photo message
+        if message.content.content_type != MessageType::Photo {
+            self.set_status_message("Selected message is not a photo".to_string());
+            return;
+        }
+
+        // Get the media directory from config (clone to avoid borrow issues)
+        let media_dir = self.config.cache.media_directory.clone();
+
+        // Download if needed and open
+        self.set_status_message("Downloading photo...".to_string());
+
+        match self
+            .telegram
+            .download_photo_if_needed(&message, &media_dir)
+            .await
+        {
+            Ok(path) => {
+                self.clear_status_message();
+                // Open the file with system viewer
+                if let Err(e) = TelegramClient::open_media_file(&path).await {
+                    self.set_status_message(format!("Failed to open photo: {e}"));
+                }
+            },
+            Err(e) => {
+                self.set_status_message(format!("Failed to download photo: {e}"));
             },
         }
     }
@@ -733,6 +787,16 @@ impl App {
                         // Focus the input - sync both the model and the pane
                         self.conversation_model.input.set_focused(true);
                         self.focused_pane = FocusedPane::Input;
+                        return None;
+                    },
+                    Action::OpenMedia => {
+                        // Get the selected message ID and open media
+                        if let (Some(chat_id), Some(message)) = (
+                            self.selected_chat_id,
+                            self.conversation_model.selected_message(),
+                        ) {
+                            return Some(AppAction::OpenMedia(chat_id, message.id));
+                        }
                         return None;
                     },
                     // Global actions should be handled by handle_action

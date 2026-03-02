@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use grammers_client::client::{LoginToken, PasswordToken, UpdatesConfiguration, UpdateStream};
+use grammers_client::client::{LoginToken, PasswordToken, UpdateStream, UpdatesConfiguration};
 use grammers_client::sender::SenderPoolFatHandle;
 use grammers_client::{Client, SenderPool};
 use grammers_session::storages::SqliteSession;
@@ -106,12 +106,7 @@ impl TelegramClient {
     /// );
     /// ```
     #[must_use]
-    pub fn new(
-        api_id: i32,
-        api_hash: String,
-        session_path: String,
-        cache: SharedCache,
-    ) -> Self {
+    pub fn new(api_id: i32, api_hash: String, session_path: String, cache: SharedCache) -> Self {
         Self {
             inner: Arc::new(RwLock::new(None)),
             api_id,
@@ -152,7 +147,7 @@ impl TelegramClient {
         let session = Arc::new(
             SqliteSession::open(&self.session_path)
                 .await
-                .map_err(|e| TelegramError::Session(e.to_string()))?
+                .map_err(|e| TelegramError::Session(e.to_string()))?,
         );
 
         debug!("Session loaded from {}", self.session_path);
@@ -172,10 +167,7 @@ impl TelegramClient {
         info!("Connected to Telegram servers");
 
         // Check if already authorized
-        let is_authorized = client
-            .is_authorized()
-            .await
-            .map_err(TelegramError::from)?;
+        let is_authorized = client.is_authorized().await.map_err(TelegramError::from)?;
 
         // Update auth state
         let new_state = if is_authorized {

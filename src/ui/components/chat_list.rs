@@ -501,7 +501,8 @@ impl ChatListModel {
             .block(block)
             .highlight_symbol("▌ ")
             .highlight_style(highlight_style)
-            .highlight_spacing(HighlightSpacing::Always);
+            .highlight_spacing(HighlightSpacing::Always)
+            .repeat_highlight_symbol(true);
 
         // Render the list with state
         frame.render_stateful_widget(list, area, &mut self.list_state);

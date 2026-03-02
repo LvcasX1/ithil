@@ -101,7 +101,7 @@ impl TelegramClient {
                             }
                         }
                     }
-                }
+                },
                 Err(e) => {
                     error!("Error fetching update: {}", e);
 
@@ -115,7 +115,7 @@ impl TelegramClient {
 
                     // For recoverable errors, wait a bit and continue
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                }
+                },
             }
         }
 
@@ -161,7 +161,7 @@ impl TelegramClient {
                     message: Some(Box::new(message)),
                     data: UpdateData::None,
                 })
-            }
+            },
 
             GrammersUpdate::NewMessage(msg) if msg.outgoing() => {
                 trace!("Received outgoing message confirmation: {}", msg.id());
@@ -184,7 +184,7 @@ impl TelegramClient {
                     message: Some(Box::new(message)),
                     data: UpdateData::None,
                 })
-            }
+            },
 
             GrammersUpdate::MessageEdited(msg) => {
                 trace!("Received message edit: {}", msg.id());
@@ -201,7 +201,7 @@ impl TelegramClient {
                     message: Some(Box::new(message)),
                     data: UpdateData::None,
                 })
-            }
+            },
 
             GrammersUpdate::MessageDeleted(deletion) => {
                 debug!("Received message deletion");
@@ -226,14 +226,14 @@ impl TelegramClient {
                     message: None,
                     data: UpdateData::None,
                 })
-            }
+            },
 
             GrammersUpdate::Raw(raw_update) => self.handle_raw_update(raw_update.raw).await,
 
             _ => {
                 trace!("Ignoring unhandled update type");
                 None
-            }
+            },
         }
     }
 
@@ -271,9 +271,11 @@ impl TelegramClient {
                     message: None,
                     data: UpdateData::Integer(i64::from(max_id)),
                 })
-            }
+            },
 
-            TlUpdate::ReadHistoryOutbox(types::UpdateReadHistoryOutbox { peer, max_id, .. }) => {
+            TlUpdate::ReadHistoryOutbox(types::UpdateReadHistoryOutbox {
+                peer, max_id, ..
+            }) => {
                 let chat_id = peer_to_chat_id(&peer);
                 debug!("Read outbox update for chat {}: max_id={}", chat_id, max_id);
 
@@ -289,7 +291,7 @@ impl TelegramClient {
                     message: None,
                     data: UpdateData::Integer(i64::from(max_id)),
                 })
-            }
+            },
 
             TlUpdate::ReadChannelInbox(types::UpdateReadChannelInbox {
                 channel_id,
@@ -316,7 +318,7 @@ impl TelegramClient {
                     message: None,
                     data: UpdateData::Integer(i64::from(max_id)),
                 })
-            }
+            },
 
             TlUpdate::UserStatus(types::UpdateUserStatus { user_id, status }) => {
                 debug!("User {} status changed", user_id);
@@ -335,12 +337,12 @@ impl TelegramClient {
                     message: None,
                     data: UpdateData::None,
                 })
-            }
+            },
 
             TlUpdate::ChatParticipants(_) => {
                 debug!("Chat participants update");
                 None // We don't track participants yet
-            }
+            },
 
             TlUpdate::DraftMessage(types::UpdateDraftMessage { peer, draft, .. }) => {
                 let chat_id = peer_to_chat_id(&peer);
@@ -364,7 +366,7 @@ impl TelegramClient {
                     message: None,
                     data: UpdateData::String(draft_text),
                 })
-            }
+            },
 
             TlUpdate::PinnedDialogs(_) => {
                 debug!("Pinned dialogs update");
@@ -375,12 +377,12 @@ impl TelegramClient {
                     message: None,
                     data: UpdateData::None,
                 })
-            }
+            },
 
             _ => {
                 trace!("Ignoring unhandled raw update");
                 None
-            }
+            },
         }
     }
 }
@@ -422,12 +424,10 @@ mod tests {
     fn test_peer_to_chat_id() {
         use grammers_client::tl::types;
 
-        let user_peer =
-            grammers_client::tl::enums::Peer::User(types::PeerUser { user_id: 12345 });
+        let user_peer = grammers_client::tl::enums::Peer::User(types::PeerUser { user_id: 12345 });
         assert_eq!(peer_to_chat_id(&user_peer), 12345);
 
-        let chat_peer =
-            grammers_client::tl::enums::Peer::Chat(types::PeerChat { chat_id: 67890 });
+        let chat_peer = grammers_client::tl::enums::Peer::Chat(types::PeerChat { chat_id: 67890 });
         assert_eq!(peer_to_chat_id(&chat_peer), 67890);
 
         let channel_peer =

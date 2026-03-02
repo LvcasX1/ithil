@@ -357,20 +357,96 @@ fn grammers_peer_type(peer: &GrammersPeer) -> ChatType {
 
 /// Converts a grammers Message to our Message type.
 pub(crate) fn grammers_message_to_message(msg: &grammers_client::message::Message) -> Message {
-    use crate::types::{MessageContent, MessageType};
+    use crate::types::{DownloadStatus, Media, MessageContent, MessageType, PhotoSize};
 
     let sender_id = msg.sender().map_or(0, |s| s.id().bare_id());
     let chat_id = msg.peer_id().bare_id();
 
-    // Determine message type and content based on media
-    let (content_type, text, media) = if msg.media().is_some() {
-        // Has media - determine type
-        let media_type = match msg.media() {
-            Some(grammers_client::media::Media::Photo(_)) => MessageType::Photo,
-            Some(grammers_client::media::Media::Document(ref doc)) => {
+    // Determine message type, text/caption, and media based on media presence
+    let (content_type, text, caption, media) = if let Some(grammers_media) = msg.media() {
+        // Has media - determine type and extract metadata
+        match grammers_media {
+            grammers_client::media::Media::Photo(ref photo) => {
+                // Extract photo metadata from grammers PhotoSize variants
+                let photo_sizes: Vec<PhotoSize> = photo
+                    .thumbs()
+                    .iter()
+                    .filter_map(|thumb| {
+                        // Extract dimensions from PhotoSize variants that have them
+                        match thumb {
+                            grammers_client::media::PhotoSize::Size(size) => Some(PhotoSize {
+                                size_type: thumb.photo_type(),
+                                width: size.width,
+                                height: size.height,
+                                size: size.size,
+                            }),
+                            grammers_client::media::PhotoSize::Progressive(prog) => {
+                                Some(PhotoSize {
+                                    size_type: thumb.photo_type(),
+                                    width: prog.width,
+                                    height: prog.height,
+                                    // Use the largest size from progressive sizes
+                                    size: prog.sizes.iter().max().copied().unwrap_or(0),
+                                })
+                            },
+                            grammers_client::media::PhotoSize::Cached(cached) => Some(PhotoSize {
+                                size_type: thumb.photo_type(),
+                                width: cached.width,
+                                height: cached.height,
+                                #[allow(clippy::cast_possible_truncation)]
+                                size: cached.bytes.len() as i32,
+                            }),
+                            // Skip variants without dimension info
+                            _ => None,
+                        }
+                    })
+                    .collect();
+
+                // Find the largest photo size for dimensions
+                let (width, height) = photo_sizes
+                    .iter()
+                    .max_by_key(|s| s.width * s.height)
+                    .map(|s| (s.width, s.height))
+                    .unwrap_or((0, 0));
+
+                // Calculate total size from largest photo
+                let size = photo.size().map(|s| s as i64).unwrap_or_else(|| {
+                    photo_sizes
+                        .iter()
+                        .max_by_key(|s| s.size)
+                        .map(|s| i64::from(s.size))
+                        .unwrap_or(0)
+                });
+
+                let media = Media {
+                    id: photo.id().to_string(),
+                    width,
+                    height,
+                    duration: 0,
+                    size,
+                    mime_type: "image/jpeg".to_string(),
+                    thumbnail: None,
+                    local_path: String::new(),
+                    remote_path: String::new(),
+                    is_downloaded: false,
+                    access_hash: 0, // Not needed - grammers handles download internally
+                    file_reference: Vec::new(),
+                    photo_sizes,
+                    download_status: DownloadStatus::NotDownloaded,
+                    download_progress: None,
+                };
+
+                (
+                    MessageType::Photo,
+                    String::new(),
+                    msg.text().to_string(),
+                    Some(Box::new(media)),
+                )
+            },
+            grammers_client::media::Media::Document(ref doc) => {
                 // Check document MIME type and attributes for specific types
                 let mime = doc.mime_type().unwrap_or("");
-                if mime.starts_with("audio/ogg") || mime == "audio/opus" {
+                let content_type = if mime.starts_with("audio/ogg") || mime == "audio/opus" {
                     // Voice messages are typically ogg/opus
                     MessageType::Voice
                 } else if mime.starts_with("video/") {
@@ -379,20 +455,60 @@ pub(crate) fn grammers_message_to_message(msg: &grammers_client::message::Messag
                     MessageType::Audio
                 } else {
                     MessageType::Document
-                }
+                };
+                (content_type, msg.text().to_string(), String::new(), None)
             },
-            Some(grammers_client::media::Media::Sticker(_)) => MessageType::Sticker,
-            Some(grammers_client::media::Media::Contact(_)) => MessageType::Contact,
-            Some(grammers_client::media::Media::Geo(_)) => MessageType::Location,
-            Some(grammers_client::media::Media::GeoLive(_)) => MessageType::Location,
-            Some(grammers_client::media::Media::Venue(_)) => MessageType::Venue,
-            Some(grammers_client::media::Media::Poll(_)) => MessageType::Poll,
+            grammers_client::media::Media::Sticker(_) => (
+                MessageType::Sticker,
+                msg.text().to_string(),
+                String::new(),
+                None,
+            ),
+            grammers_client::media::Media::Contact(_) => (
+                MessageType::Contact,
+                msg.text().to_string(),
+                String::new(),
+                None,
+            ),
+            grammers_client::media::Media::Geo(_) => (
+                MessageType::Location,
+                msg.text().to_string(),
+                String::new(),
+                None,
+            ),
+            grammers_client::media::Media::GeoLive(_) => (
+                MessageType::Location,
+                msg.text().to_string(),
+                String::new(),
+                None,
+            ),
+            grammers_client::media::Media::Venue(_) => (
+                MessageType::Venue,
+                msg.text().to_string(),
+                String::new(),
+                None,
+            ),
+            grammers_client::media::Media::Poll(_) => (
+                MessageType::Poll,
+                msg.text().to_string(),
+                String::new(),
+                None,
+            ),
             // Game media type doesn't exist in grammers 0.9
-            _ => MessageType::Document,
-        };
-        (media_type, msg.text().to_string(), None)
+            _ => (
+                MessageType::Document,
+                msg.text().to_string(),
+                String::new(),
+                None,
+            ),
+        }
     } else {
-        (MessageType::Text, msg.text().to_string(), None)
+        (
+            MessageType::Text,
+            msg.text().to_string(),
+            String::new(),
+            None,
+        )
     };
 
     // Use the public date() method which returns DateTime<Utc>
@@ -408,7 +524,7 @@ pub(crate) fn grammers_message_to_message(msg: &grammers_client::message::Messag
         content: MessageContent {
             content_type,
             text,
-            caption: String::new(),
+            caption,
             entities: Vec::new(), // Would need to convert entities
             media,
             location: None,

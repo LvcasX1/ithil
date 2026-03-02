@@ -43,6 +43,7 @@ pub mod auth;
 pub mod chats;
 pub mod client;
 pub mod error;
+pub mod media;
 pub mod messages;
 pub mod updates;
 

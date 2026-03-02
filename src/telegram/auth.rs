@@ -43,7 +43,10 @@ impl TelegramClient {
     pub async fn request_login_code(&self, phone: &str) -> Result<(), TelegramError> {
         let client = self.client().await?;
 
-        info!("Requesting login code for phone: {}***", &phone[..4.min(phone.len())]);
+        info!(
+            "Requesting login code for phone: {}***",
+            &phone[..4.min(phone.len())]
+        );
 
         // request_login_code takes phone and api_hash
         let token = client
@@ -107,30 +110,30 @@ impl TelegramClient {
                 self.set_auth_state(AuthState::Ready).await;
 
                 Ok(())
-            }
+            },
             Err(SignInError::PasswordRequired(password_token)) => {
                 info!("2FA password required");
                 self.set_password_token(password_token).await;
                 self.set_auth_state(AuthState::WaitPassword).await;
                 Err(TelegramError::PasswordRequired)
-            }
+            },
             Err(SignInError::SignUpRequired) => {
                 info!("Sign up required - phone number not registered");
                 // Store the login token back for sign_up
                 self.set_login_token(token).await;
                 self.set_auth_state(AuthState::WaitRegistration).await;
                 Err(TelegramError::SignUpRequired)
-            }
+            },
             Err(SignInError::InvalidCode) => {
                 warn!("Invalid verification code");
                 // Store the token back so user can retry
                 self.set_login_token(token).await;
                 Err(TelegramError::InvalidCode)
-            }
+            },
             Err(e) => {
                 warn!("Sign in failed: {}", e);
                 Err(e.into())
-            }
+            },
         }
     }
 
@@ -178,18 +181,18 @@ impl TelegramClient {
                 self.set_auth_state(AuthState::Ready).await;
 
                 Ok(())
-            }
+            },
             Err(SignInError::InvalidPassword(_new_token)) => {
                 warn!("Invalid 2FA password");
                 // User needs to get a new code and start over
                 self.set_auth_state(AuthState::WaitPhoneNumber).await;
                 Err(TelegramError::InvalidPassword)
-            }
+            },
             Err(e) => {
                 warn!("2FA check failed: {}", e);
                 self.set_auth_state(AuthState::WaitPhoneNumber).await;
                 Err(e.into())
-            }
+            },
         }
     }
 
@@ -216,7 +219,9 @@ impl TelegramClient {
         // Note: Sign up via third-party apps is not supported by Telegram anymore.
         // Users must sign up using an official Telegram app first.
         // See: https://bugs.telegram.org/c/25410/1
-        warn!("Sign up via third-party apps is not supported. Please use an official Telegram app.");
+        warn!(
+            "Sign up via third-party apps is not supported. Please use an official Telegram app."
+        );
         Err(TelegramError::SignUpRequired)
     }
 
@@ -282,7 +287,7 @@ pub(crate) fn grammers_user_to_user(user: &grammers_client::peer::User) -> User 
         username: user.username().unwrap_or("").to_string(),
         phone_number: user.phone().unwrap_or("").to_string(),
         profile_photo_id: String::new(), // Photo handling would require additional API calls
-        status: UserStatus::Offline, // Would need to check user.raw for status
+        status: UserStatus::Offline,     // Would need to check user.raw for status
         is_bot: user.is_bot(),
         is_contact: false, // Not directly available
         is_mutual_contact: false,

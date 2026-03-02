@@ -155,45 +155,58 @@ impl<'a> MessageWidget<'a> {
         match self.message.content.content_type {
             MessageType::Text => self.message.content.text.clone(),
             MessageType::Photo => {
-                if self.message.content.caption.is_empty() {
-                    "[Photo]".to_string()
-                } else {
-                    format!("[Photo] {}", self.message.content.caption)
+                let mut photo_text = String::from("📷 [Photo");
+
+                // Add dimensions if we have media info
+                if let Some(ref media) = self.message.content.media {
+                    if media.width > 0 && media.height > 0 {
+                        photo_text.push_str(&format!(" {}×{}", media.width, media.height));
+                    }
                 }
+
+                photo_text.push(']');
+
+                // Add caption if present
+                if !self.message.content.caption.is_empty() {
+                    photo_text.push(' ');
+                    photo_text.push_str(&self.message.content.caption);
+                }
+
+                photo_text
             },
             MessageType::Video => {
                 if self.message.content.caption.is_empty() {
-                    "[Video]".to_string()
+                    "🎬 [Video]".to_string()
                 } else {
-                    format!("[Video] {}", self.message.content.caption)
+                    format!("🎬 [Video] {}", self.message.content.caption)
                 }
             },
-            MessageType::Voice => "[Voice message]".to_string(),
-            MessageType::VideoNote => "[Video note]".to_string(),
+            MessageType::Voice => "🎤 [Voice message]".to_string(),
+            MessageType::VideoNote => "⏺ [Video note]".to_string(),
             MessageType::Audio => {
                 if self.message.content.caption.is_empty() {
-                    "[Audio]".to_string()
+                    "🎵 [Audio]".to_string()
                 } else {
-                    format!("[Audio] {}", self.message.content.caption)
+                    format!("🎵 [Audio] {}", self.message.content.caption)
                 }
             },
             MessageType::Document => self.message.content.document.as_ref().map_or_else(
-                || "[Document]".to_string(),
-                |doc| format!("[Document: {}]", doc.file_name),
+                || "📎 [Document]".to_string(),
+                |doc| format!("📎 [Document: {}]", doc.file_name),
             ),
             MessageType::Sticker => self.message.content.sticker.as_ref().map_or_else(
                 || "[Sticker]".to_string(),
                 |sticker| format!("[Sticker: {}]", sticker.emoji),
             ),
-            MessageType::Animation => "[GIF]".to_string(),
-            MessageType::Location => "[Location]".to_string(),
-            MessageType::Contact => "[Contact]".to_string(),
+            MessageType::Animation => "🎞 [GIF]".to_string(),
+            MessageType::Location => "📍 [Location]".to_string(),
+            MessageType::Contact => "👤 [Contact]".to_string(),
             MessageType::Poll => self.message.content.poll.as_ref().map_or_else(
-                || "[Poll]".to_string(),
-                |poll| format!("[Poll: {}]", poll.question),
+                || "📊 [Poll]".to_string(),
+                |poll| format!("📊 [Poll: {}]", poll.question),
             ),
-            MessageType::Venue => "[Venue]".to_string(),
-            MessageType::Game => "[Game]".to_string(),
+            MessageType::Venue => "📍 [Venue]".to_string(),
+            MessageType::Game => "🎮 [Game]".to_string(),
         }
     }
 
@@ -377,7 +390,29 @@ mod tests {
         };
         let widget = MessageWidget::new(&msg, "Grace".to_string());
 
-        assert_eq!(widget.get_content_text(), "[Photo] Nice photo");
+        assert_eq!(widget.get_content_text(), "📷 [Photo] Nice photo");
+    }
+
+    #[test]
+    fn test_content_text_for_photo_with_dimensions() {
+        use crate::types::Media;
+
+        let msg = Message {
+            content: MessageContent {
+                content_type: MessageType::Photo,
+                caption: String::new(),
+                media: Some(Box::new(Media {
+                    width: 1920,
+                    height: 1080,
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let widget = MessageWidget::new(&msg, "Grace".to_string());
+
+        assert_eq!(widget.get_content_text(), "📷 [Photo 1920×1080]");
     }
 
     #[test]
