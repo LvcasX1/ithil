@@ -160,14 +160,14 @@ impl<'a> MessageWidget<'a> {
                 } else {
                     format!("[Photo] {}", self.message.content.caption)
                 }
-            }
+            },
             MessageType::Video => {
                 if self.message.content.caption.is_empty() {
                     "[Video]".to_string()
                 } else {
                     format!("[Video] {}", self.message.content.caption)
                 }
-            }
+            },
             MessageType::Voice => "[Voice message]".to_string(),
             MessageType::VideoNote => "[Video note]".to_string(),
             MessageType::Audio => {
@@ -176,7 +176,7 @@ impl<'a> MessageWidget<'a> {
                 } else {
                     format!("[Audio] {}", self.message.content.caption)
                 }
-            }
+            },
             MessageType::Document => self.message.content.document.as_ref().map_or_else(
                 || "[Document]".to_string(),
                 |doc| format!("[Document: {}]", doc.file_name),

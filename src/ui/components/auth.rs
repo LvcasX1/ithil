@@ -144,10 +144,10 @@ impl AuthModel {
         match key.code {
             KeyCode::Enter => {
                 return self.handle_submit();
-            }
+            },
             KeyCode::Esc => {
                 return Some(AuthAction::Quit);
-            }
+            },
             _ => {
                 // Clear error on any input
                 if self.error_message.is_some() {
@@ -155,7 +155,7 @@ impl AuthModel {
                 }
                 // Forward to input component
                 self.input.handle_input(key);
-            }
+            },
         }
 
         None
@@ -193,25 +193,25 @@ impl AuthModel {
                     .set_placeholder("Phone number (e.g., +1234567890)");
                 self.input.set_char_limit(20);
                 self.input.set_echo_mode(EchoMode::Normal);
-            }
+            },
             AuthState::WaitCode => {
                 self.input.set_placeholder("Verification code");
                 self.input.set_char_limit(10);
                 self.input.set_echo_mode(EchoMode::Normal);
-            }
+            },
             AuthState::WaitPassword => {
                 self.input.set_placeholder("2FA password");
                 self.input.set_char_limit(100);
                 self.input.set_echo_mode(EchoMode::Password);
-            }
+            },
             AuthState::WaitRegistration => {
                 self.input.set_placeholder("First name");
                 self.input.set_char_limit(50);
                 self.input.set_echo_mode(EchoMode::Normal);
-            }
+            },
             AuthState::Ready | AuthState::Closed => {
                 // No input needed
-            }
+            },
         }
     }
 

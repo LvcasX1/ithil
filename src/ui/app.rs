@@ -56,7 +56,8 @@ use crate::telegram::TelegramClient;
 use crate::types::{AuthState, Update, UpdateType};
 
 use super::components::{
-    AuthAction, AuthModel, ChatListAction, ChatListModel, ConversationModel, ConversationWidget,
+    AuthAction, AuthModel, ChatListAction, ChatListModel, ConversationAction, ConversationModel,
+    ConversationWidget,
 };
 use super::keys::{Action, KeyMap};
 use super::styles::Styles;
@@ -122,6 +123,12 @@ pub enum AppAction {
     Auth(AuthAction),
     /// A chat was selected and should be opened
     ChatSelected(i64),
+    /// Send a message to the current chat
+    SendMessage(i64, String, Option<i64>),
+    /// Edit an existing message
+    EditMessage(i64, i64, String),
+    /// Delete a message
+    DeleteMessage(i64, i64),
 }
 
 /// The main TUI application.
@@ -490,8 +497,80 @@ impl App {
             AppAction::ChatSelected(chat_id) => {
                 self.handle_chat_selected(chat_id).await;
             },
+            AppAction::SendMessage(chat_id, text, reply_to) => {
+                self.handle_send_message(chat_id, text, reply_to).await;
+            },
+            AppAction::EditMessage(chat_id, message_id, text) => {
+                self.handle_edit_message(chat_id, message_id, text).await;
+            },
+            AppAction::DeleteMessage(chat_id, message_id) => {
+                self.handle_delete_message(chat_id, message_id).await;
+            },
             // Quit and Forward are already handled by setting should_quit in handle_key
             AppAction::Quit | AppAction::Forward(_) => {},
+        }
+    }
+
+    /// Converts a conversation action to an app action.
+    fn handle_conversation_action(&self, action: ConversationAction) -> Option<AppAction> {
+        let chat_id = self.selected_chat_id?;
+
+        match action {
+            ConversationAction::SendMessage(text, reply_to) => {
+                Some(AppAction::SendMessage(chat_id, text, reply_to))
+            },
+            ConversationAction::EditMessage(message_id, text) => {
+                Some(AppAction::EditMessage(chat_id, message_id, text))
+            },
+            ConversationAction::DeleteMessage(message_id) => {
+                Some(AppAction::DeleteMessage(chat_id, message_id))
+            },
+            ConversationAction::ForwardMessage(_message_id) => {
+                // Forward not yet implemented
+                None
+            },
+        }
+    }
+
+    /// Handle sending a message.
+    async fn handle_send_message(&mut self, chat_id: i64, text: String, reply_to: Option<i64>) {
+        match self.telegram.send_message(chat_id, &text, reply_to).await {
+            Ok(message) => {
+                // Add the sent message to the conversation
+                self.conversation_model.add_message(message);
+            },
+            Err(e) => {
+                self.set_status_message(format!("Failed to send message: {e}"));
+            },
+        }
+    }
+
+    /// Handle editing a message.
+    async fn handle_edit_message(&mut self, chat_id: i64, message_id: i64, text: String) {
+        match self.telegram.edit_message(chat_id, message_id, &text).await {
+            Ok(message) => {
+                self.conversation_model.update_message(message);
+            },
+            Err(e) => {
+                self.set_status_message(format!("Failed to edit message: {e}"));
+            },
+        }
+    }
+
+    /// Handle deleting a message.
+    async fn handle_delete_message(&mut self, chat_id: i64, message_id: i64) {
+        // revoke=true means delete for everyone (if allowed)
+        match self
+            .telegram
+            .delete_messages(chat_id, &[message_id], true)
+            .await
+        {
+            Ok(()) => {
+                self.conversation_model.delete_message(message_id);
+            },
+            Err(e) => {
+                self.set_status_message(format!("Failed to delete message: {e}"));
+            },
         }
     }
 
@@ -646,16 +725,60 @@ impl App {
                     | Action::Edit
                     | Action::Delete
                     | Action::Forward
-                    | Action::FocusInput
-                    | Action::OpenChat
                     | Action::CancelAction => {
                         let _ = self.conversation_model.handle_action(action);
+                        return None;
+                    },
+                    Action::FocusInput | Action::OpenChat => {
+                        // Focus the input - sync both the model and the pane
+                        self.conversation_model.input.set_focused(true);
+                        self.focused_pane = FocusedPane::Input;
                         return None;
                     },
                     // Global actions should be handled by handle_action
                     _ => return self.handle_action(action),
                 }
             }
+            return None;
+        }
+
+        // Handle message input when focused
+        if self.state == AppState::Main && self.focused_pane == FocusedPane::Input {
+            // Check for special keys first
+            if let Some(action) = self.keymap.get_action(&key) {
+                match action {
+                    // Enter key (OpenChat) sends message when in input mode
+                    Action::SendMessage | Action::OpenChat => {
+                        // Handle send message action
+                        if let Some(conv_action) =
+                            self.conversation_model.handle_action(Action::SendMessage)
+                        {
+                            return self.handle_conversation_action(conv_action);
+                        }
+                        return None;
+                    },
+                    Action::CancelAction => {
+                        // Unfocus input and return to conversation
+                        self.conversation_model.input.set_focused(false);
+                        self.conversation_model.clear_action_state();
+                        self.focused_pane = FocusedPane::Conversation;
+                        return None;
+                    },
+                    Action::NewLine => {
+                        self.conversation_model.input.insert_char('\n');
+                        return None;
+                    },
+                    // Only Quit should work while typing (Ctrl+Q)
+                    // Help (?) should be typed as a character
+                    Action::Quit => {
+                        return self.handle_action(action);
+                    },
+                    _ => {},
+                }
+            }
+
+            // Forward raw key events to the input component
+            self.conversation_model.input.handle_input(key);
             return None;
         }
 

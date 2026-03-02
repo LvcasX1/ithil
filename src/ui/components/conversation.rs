@@ -307,7 +307,7 @@ impl ConversationModel {
     }
 
     /// Clears the reply/edit state.
-    fn clear_action_state(&mut self) {
+    pub fn clear_action_state(&mut self) {
         self.reply_to = None;
         self.editing = None;
         self.input_mode = InputMode::Normal;
@@ -509,23 +509,95 @@ impl<F> ConversationWidget<'_, F>
 where
     F: Fn(i64) -> String,
 {
-    /// Renders the message list.
+    /// Renders the message list, anchored to the bottom.
+    ///
+    /// Messages are rendered so that the most recent message appears at the bottom
+    /// of the available area, similar to most chat applications. The algorithm:
+    /// 1. Start from the selected message and work backwards to find which messages fit
+    /// 2. Render those messages from top to bottom, anchored to the bottom of the area
     fn render_messages(&self, area: Rect, buf: &mut Buffer) {
-        let mut y = area.y;
-        let max_y = area.y + area.height;
         let message_spacing: u16 = 1; // Blank line between messages
 
-        for (idx, msg) in self
+        if self.model.messages.is_empty() {
+            return;
+        }
+
+        // Pre-calculate heights for ALL messages
+        let all_heights: Vec<u16> = self
             .model
             .messages
             .iter()
-            .enumerate()
-            .skip(self.model.scroll_offset)
-        {
+            .map(|msg| {
+                let sender_name = (self.get_sender_name)(msg.sender_id);
+                MessageWidget::new(msg, sender_name)
+                    .width(area.width)
+                    .height()
+            })
+            .collect();
+
+        // Determine which messages to render by working backwards from the end
+        // (or from selected_index if scrolled up) to fill the available space
+        let anchor_index = self.model.selected_index.min(self.model.messages.len() - 1);
+
+        // First, collect messages from anchor_index going forward (toward newer messages)
+        // Then collect messages going backward (toward older messages) to fill remaining space
+        let mut messages_to_render: Vec<(usize, u16)> = Vec::new();
+        let mut accumulated_height: u16 = 0;
+
+        // Start with messages from anchor_index to the end
+        for idx in anchor_index..self.model.messages.len() {
+            let height = all_heights[idx];
+            let needed = if messages_to_render.is_empty() {
+                height
+            } else {
+                height + message_spacing
+            };
+
+            if accumulated_height + needed <= area.height {
+                accumulated_height += needed;
+                messages_to_render.push((idx, height));
+            } else {
+                break;
+            }
+        }
+
+        // Now try to add older messages (before anchor_index) if there's space
+        if anchor_index > 0 {
+            for idx in (0..anchor_index).rev() {
+                let height = all_heights[idx];
+                let needed = height + message_spacing; // Always need spacing since we have messages
+
+                if accumulated_height + needed <= area.height {
+                    accumulated_height += needed;
+                    messages_to_render.insert(0, (idx, height));
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if messages_to_render.is_empty() {
+            return;
+        }
+
+        // Calculate starting Y position to anchor messages to the bottom
+        let total_height = accumulated_height;
+        let start_y = if total_height < area.height {
+            area.y + area.height - total_height
+        } else {
+            area.y
+        };
+
+        // Render messages
+        let mut y = start_y;
+        let max_y = area.y + area.height;
+
+        for (idx, msg_height) in messages_to_render {
             if y >= max_y {
                 break;
             }
 
+            let msg = &self.model.messages[idx];
             let sender_name = (self.get_sender_name)(msg.sender_id);
             let is_selected = idx == self.model.selected_index;
 
@@ -533,11 +605,11 @@ where
                 .selected(is_selected)
                 .width(area.width);
 
-            let msg_height = msg_widget.height().min(max_y - y);
-            let msg_area = Rect::new(area.x, y, area.width, msg_height);
+            let render_height = msg_height.min(max_y - y);
+            let msg_area = Rect::new(area.x, y, area.width, render_height);
 
             msg_widget.render(msg_area, buf);
-            y += msg_height + message_spacing; // Add spacing after each message
+            y += msg_height + message_spacing;
         }
     }
 

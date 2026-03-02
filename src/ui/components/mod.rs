@@ -37,7 +37,7 @@ pub mod sidebar;
 mod status_bar;
 
 pub use auth::{AuthAction, AuthModel};
-pub use chat_item::{ChatItemComponent, ChatItemConfig};
+pub use chat_item::{ChatItemBuilder, ChatItemComponent, ChatItemConfig};
 pub use chat_list::{ChatListAction, ChatListModel, ChatListState};
 pub use conversation::{ConversationAction, ConversationModel, ConversationWidget, InputMode};
 pub use help_modal::{HelpModal, HelpModalWidget};

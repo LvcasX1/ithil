@@ -218,31 +218,31 @@ impl InputComponent {
 
                 self.insert_char(c);
                 true
-            }
+            },
             KeyCode::Backspace => {
                 self.delete_char_backward();
                 true
-            }
+            },
             KeyCode::Delete => {
                 self.delete_char_forward();
                 true
-            }
+            },
             KeyCode::Left => {
                 self.move_cursor_left();
                 true
-            }
+            },
             KeyCode::Right => {
                 self.move_cursor_right();
                 true
-            }
+            },
             KeyCode::Home => {
                 self.cursor = 0;
                 true
-            }
+            },
             KeyCode::End => {
                 self.cursor = self.value.chars().count();
                 true
-            }
+            },
             _ => false,
         }
     }
@@ -414,7 +414,7 @@ impl StatefulWidget for &InputComponent {
                     // Since we can't return a reference to a local variable,
                     // we handle this differently in render
                     &self.value
-                }
+                },
             }
         };
 

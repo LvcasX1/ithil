@@ -2,21 +2,27 @@
 //!
 //! This module provides the [`ChatListModel`] which manages the chat list pane,
 //! including selection, scrolling, search/filtering, and rendering.
+//!
+//! # Ratatui Standards
+//!
+//! This component follows modern Ratatui patterns:
+//! - Uses the standard [`List`] widget with [`ListState`] for selection
+//! - Leverages [`ListItem`] created by [`ChatItemBuilder`] for consistent styling
+//! - Applies highlight styles via the `List` widget's built-in methods
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
-    buffer::Buffer,
     layout::Rect,
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, Borders, HighlightSpacing, List, ListState, Paragraph},
 };
 
 use crate::cache::SharedCache;
 use crate::types::Chat;
 use crate::ui::styles::{colors, Styles};
 
-use super::chat_item::{ChatItemComponent, ChatItemConfig};
+use super::chat_item::ChatItemBuilder;
 
 /// Actions that can result from chat list input handling.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,13 +31,6 @@ pub enum ChatListAction {
     OpenChat(i64),
     /// No action needed
     None,
-}
-
-/// State for the chat list widget.
-#[derive(Debug, Default)]
-pub struct ChatListState {
-    /// Current scroll offset (in items, not pixels)
-    pub scroll_offset: usize,
 }
 
 /// The chat list model managing selection, search, and display.
@@ -62,8 +61,8 @@ pub struct ChatListModel {
     cache: SharedCache,
     /// List of chats (sorted by recency)
     chats: Vec<Chat>,
-    /// Currently selected index
-    selected_index: usize,
+    /// Ratatui `ListState` for selection and scrolling
+    list_state: ListState,
     /// Available width
     width: u16,
     /// Available height
@@ -76,8 +75,6 @@ pub struct ChatListModel {
     search_query: String,
     /// Filtered chats (when in search mode)
     filtered_chats: Vec<Chat>,
-    /// Scroll offset for viewport
-    scroll_offset: usize,
 }
 
 impl ChatListModel {
@@ -87,14 +84,13 @@ impl ChatListModel {
         Self {
             cache,
             chats: Vec::new(),
-            selected_index: 0,
+            list_state: ListState::default(),
             width: 0,
             height: 0,
             focused: true,
             search_mode: false,
             search_query: String::new(),
             filtered_chats: Vec::new(),
-            scroll_offset: 0,
         }
     }
 
@@ -111,7 +107,7 @@ impl ChatListModel {
 
     /// Returns whether the chat list is focused.
     #[must_use]
-    pub fn is_focused(&self) -> bool {
+    pub const fn is_focused(&self) -> bool {
         self.focused
     }
 
@@ -124,10 +120,7 @@ impl ChatListModel {
     /// Sets the list of chats and sorts them.
     pub fn set_chats(&mut self, mut chats: Vec<Chat>) {
         // Remember selected chat ID
-        let selected_chat_id = self
-            .get_active_chats()
-            .get(self.selected_index)
-            .map(|c| c.id);
+        let selected_chat_id = self.get_selected_chat().map(|c| c.id);
 
         // Sort chats by recency (pinned first, then by last message date)
         Self::sort_chats(&mut chats);
@@ -136,21 +129,23 @@ impl ChatListModel {
         // Try to maintain selection on the same chat
         if let Some(chat_id) = selected_chat_id {
             if let Some(new_idx) = self.chats.iter().position(|c| c.id == chat_id) {
-                self.selected_index = new_idx;
+                self.list_state.select(Some(new_idx));
             } else {
-                // Chat not found, bounds check
-                self.selected_index = self.selected_index.min(self.chats.len().saturating_sub(1));
+                // Chat not found, select first if available
+                self.select_first_if_available();
             }
+        } else {
+            self.select_first_if_available();
         }
+    }
 
-        // Bounds check
-        if self.chats.is_empty() {
-            self.selected_index = 0;
-        } else if self.selected_index >= self.chats.len() {
-            self.selected_index = self.chats.len() - 1;
+    /// Selects the first chat if the list is not empty.
+    fn select_first_if_available(&mut self) {
+        if self.get_active_chats().is_empty() {
+            self.list_state.select(None);
+        } else {
+            self.list_state.select(Some(0));
         }
-
-        self.update_scroll();
     }
 
     /// Sorts chats: pinned first (by pin order), then by last message date.
@@ -179,7 +174,6 @@ impl ChatListModel {
             self.chats.push(chat);
         }
         Self::sort_chats(&mut self.chats);
-        self.update_scroll();
     }
 
     /// Marks a chat as having a new message and moves it to top.
@@ -188,7 +182,6 @@ impl ChatListModel {
             chat.has_new_message = true;
         }
         Self::sort_chats(&mut self.chats);
-        self.update_scroll();
     }
 
     /// Clears the new message flag for a chat.
@@ -202,7 +195,7 @@ impl ChatListModel {
     #[must_use]
     pub fn get_selected_chat(&self) -> Option<&Chat> {
         let chats = self.get_active_chats();
-        chats.get(self.selected_index)
+        self.list_state.selected().and_then(|i| chats.get(i))
     }
 
     /// Returns the selected chat ID.
@@ -220,6 +213,11 @@ impl ChatListModel {
         } else {
             &self.chats
         }
+    }
+
+    /// Returns the current selection index.
+    fn selected_index(&self) -> usize {
+        self.list_state.selected().unwrap_or(0)
     }
 
     /// Handles key input.
@@ -291,7 +289,7 @@ impl ChatListModel {
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 // Move up 5 items
                 for _ in 0..5 {
-                    if self.selected_index == 0 {
+                    if self.selected_index() == 0 {
                         break;
                     }
                     self.move_up();
@@ -302,7 +300,7 @@ impl ChatListModel {
                 // Move down 5 items
                 let max = self.get_active_chats().len().saturating_sub(1);
                 for _ in 0..5 {
-                    if self.selected_index >= max {
+                    if self.selected_index() >= max {
                         break;
                     }
                     self.move_down();
@@ -310,15 +308,15 @@ impl ChatListModel {
                 ChatListAction::None
             },
             KeyCode::Home | KeyCode::Char('g') => {
-                self.selected_index = 0;
-                self.update_scroll();
+                if !self.get_active_chats().is_empty() {
+                    self.list_state.select(Some(0));
+                }
                 ChatListAction::None
             },
             KeyCode::End | KeyCode::Char('G') => {
                 let chats = self.get_active_chats();
                 if !chats.is_empty() {
-                    self.selected_index = chats.len() - 1;
-                    self.update_scroll();
+                    self.list_state.select(Some(chats.len() - 1));
                 }
                 ChatListAction::None
             },
@@ -332,8 +330,7 @@ impl ChatListModel {
                 let idx = (c as usize) - ('1' as usize);
                 let chats = self.get_active_chats();
                 if idx < chats.len() {
-                    self.selected_index = idx;
-                    self.update_scroll();
+                    self.list_state.select(Some(idx));
                     self.open_selected_chat()
                 } else {
                     ChatListAction::None
@@ -354,18 +351,18 @@ impl ChatListModel {
 
     /// Moves selection up.
     fn move_up(&mut self) {
-        if self.selected_index > 0 {
-            self.selected_index -= 1;
-            self.update_scroll();
+        let selected = self.list_state.selected().unwrap_or(0);
+        if selected > 0 {
+            self.list_state.select(Some(selected - 1));
         }
     }
 
     /// Moves selection down.
     fn move_down(&mut self) {
         let chats = self.get_active_chats();
-        if self.selected_index < chats.len().saturating_sub(1) {
-            self.selected_index += 1;
-            self.update_scroll();
+        let selected = self.list_state.selected().unwrap_or(0);
+        if selected < chats.len().saturating_sub(1) {
+            self.list_state.select(Some(selected + 1));
         }
     }
 
@@ -374,6 +371,7 @@ impl ChatListModel {
         self.search_mode = true;
         self.search_query.clear();
         self.filtered_chats = self.chats.clone();
+        self.list_state.select(Some(0));
     }
 
     /// Exits search mode.
@@ -381,14 +379,14 @@ impl ChatListModel {
         self.search_mode = false;
         self.search_query.clear();
         self.filtered_chats.clear();
-        self.update_scroll();
+        self.select_first_if_available();
     }
 
     /// Filters chats based on search query.
     fn filter_chats(&mut self) {
         if self.search_query.is_empty() {
             self.filtered_chats = self.chats.clone();
-            self.selected_index = 0;
+            self.list_state.select(Some(0));
             return;
         }
 
@@ -416,34 +414,7 @@ impl ChatListModel {
             .cloned()
             .collect();
 
-        self.selected_index = 0;
-    }
-
-    /// Updates scroll offset to keep selected item visible.
-    fn update_scroll(&mut self) {
-        // Get chat count first to avoid borrow conflicts
-        let chat_count = self.get_active_chats().len();
-        if chat_count == 0 {
-            self.scroll_offset = 0;
-            return;
-        }
-
-        // Estimate items that fit in viewport
-        // Each item is about 4 lines (with borders), minus 2 for pane borders
-        let visible_height = self.height.saturating_sub(2) as usize;
-        let item_height = 4_usize;
-        let visible_items = (visible_height / item_height).max(1);
-
-        // Ensure selected item is visible
-        if self.selected_index < self.scroll_offset {
-            self.scroll_offset = self.selected_index;
-        } else if self.selected_index >= self.scroll_offset + visible_items {
-            self.scroll_offset = self.selected_index.saturating_sub(visible_items - 1);
-        }
-
-        // Clamp scroll offset
-        let max_offset = chat_count.saturating_sub(visible_items);
-        self.scroll_offset = self.scroll_offset.min(max_offset);
+        self.list_state.select(Some(0));
     }
 
     /// Returns the number of chats.
@@ -454,74 +425,40 @@ impl ChatListModel {
 
     /// Returns true if in search mode.
     #[must_use]
-    pub fn is_search_mode(&self) -> bool {
+    pub const fn is_search_mode(&self) -> bool {
         self.search_mode
     }
 
     /// Renders the chat list.
     pub fn render(&mut self, frame: &mut ratatui::Frame<'_>, area: Rect) {
-        // Update size and recalculate scroll based on actual render area
+        // Update size
         self.width = area.width;
         self.height = area.height;
-        self.update_scroll();
 
-        let mut state = ChatListState {
-            scroll_offset: self.scroll_offset,
-        };
-        let widget = ChatListWidget::new(self);
-        frame.render_stateful_widget(widget, area, &mut state);
-    }
-}
+        // Build the title
+        let title = self.build_title();
 
-/// Widget for rendering the chat list.
-struct ChatListWidget<'a> {
-    model: &'a ChatListModel,
-}
-
-impl<'a> ChatListWidget<'a> {
-    fn new(model: &'a ChatListModel) -> Self {
-        Self { model }
-    }
-
-    /// Builds the title for the chat list pane.
-    fn build_title(&self) -> Line<'a> {
-        if self.model.search_mode {
-            Line::from(vec![
-                Span::styled(" SEARCH: ", Styles::text_accent()),
-                Span::styled(&self.model.search_query, Styles::text_bright()),
-                Span::styled("_", Styles::text_accent()),
-                Span::raw(" "),
-            ])
-        } else {
-            Line::from(vec![Span::styled(" CHATS ", Styles::text_bright())])
-        }
-    }
-}
-
-impl StatefulWidget for ChatListWidget<'_> {
-    type State = ChatListState;
-
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         // Determine border style based on focus
-        let border_style = if self.model.focused {
+        let border_style = if self.focused {
             Style::default().fg(colors::NORD8)
         } else {
             Style::default().fg(colors::NORD3)
         };
 
-        let title = self.build_title();
         let block = Block::default()
             .title(title)
             .borders(Borders::ALL)
             .border_style(border_style);
 
-        let inner = block.inner(area);
-        block.render(area, buf);
+        let inner_area = block.inner(area);
 
-        let chats = self.model.get_active_chats();
+        // Get active chats
+        let chats = self.get_active_chats();
+
         if chats.is_empty() {
             // Render empty state
-            let empty_text = if self.model.search_mode {
+            frame.render_widget(block, area);
+            let empty_text = if self.search_mode {
                 "No chats match your search"
             } else {
                 "No chats yet"
@@ -531,47 +468,68 @@ impl StatefulWidget for ChatListWidget<'_> {
                 .alignment(ratatui::layout::Alignment::Center);
 
             // Center vertically
-            let y_offset = inner.height / 2;
-            if y_offset > 0 && inner.height > 1 {
-                let centered_area = Rect::new(inner.x, inner.y + y_offset, inner.width, 1);
-                paragraph.render(centered_area, buf);
+            let y_offset = inner_area.height / 2;
+            if y_offset > 0 && inner_area.height > 1 {
+                let centered_area =
+                    Rect::new(inner_area.x, inner_area.y + y_offset, inner_area.width, 1);
+                frame.render_widget(paragraph, centered_area);
             }
             return;
         }
 
-        // Calculate visible items
-        let item_height = 4_u16; // Each chat item takes 4 lines with borders
-        let visible_items = (inner.height / item_height) as usize;
-
-        // Update state's scroll offset
-        state.scroll_offset = self.model.scroll_offset;
-
-        // Render visible chat items
-        let mut y = inner.y;
-        for (idx, chat) in chats
+        // Build list items using ChatItemBuilder
+        let items: Vec<_> = chats
             .iter()
-            .enumerate()
-            .skip(state.scroll_offset)
-            .take(visible_items.max(1))
-        {
-            if y + item_height > inner.y + inner.height {
-                break;
-            }
+            .map(|chat| {
+                ChatItemBuilder::new(chat, inner_area.width.saturating_sub(4))
+                    .show_preview(true)
+                    .build()
+            })
+            .collect();
 
-            let config = ChatItemConfig {
-                is_selected: idx == self.model.selected_index,
-                is_focused: self.model.focused,
-                width: inner.width,
-                show_preview: true,
-            };
+        // Create the List widget with Ratatui's standard patterns
+        let highlight_style = if self.focused {
+            Style::default()
+                .bg(colors::NORD2)
+                .fg(colors::NORD6)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().bg(colors::NORD1).fg(colors::NORD4)
+        };
 
-            let item = ChatItemComponent::new(chat, config);
-            let item_area = Rect::new(inner.x, y, inner.width, item_height);
-            item.render(item_area, buf);
+        let list = List::new(items)
+            .block(block)
+            .highlight_symbol("▌ ")
+            .highlight_style(highlight_style)
+            .highlight_spacing(HighlightSpacing::Always);
 
-            y += item_height;
+        // Render the list with state
+        frame.render_stateful_widget(list, area, &mut self.list_state);
+    }
+
+    /// Builds the title for the chat list pane.
+    ///
+    /// Returns an owned `Line` to avoid lifetime conflicts with `list_state`.
+    fn build_title(&self) -> Line<'static> {
+        if self.search_mode {
+            Line::from(vec![
+                Span::styled(" 🔍 ", Styles::text_accent()),
+                Span::styled(self.search_query.clone(), Styles::text_bright()),
+                Span::styled("_", Styles::text_accent()),
+                Span::raw(" "),
+            ])
+        } else {
+            Line::from(vec![Span::styled(" Chats ", Styles::text_bright())])
         }
     }
+}
+
+// Keep ChatListState for potential external use, but it's no longer used internally
+/// State for the chat list widget (legacy compatibility).
+#[derive(Debug, Default)]
+pub struct ChatListState {
+    /// Current scroll offset (in items, not pixels)
+    pub scroll_offset: usize,
 }
 
 #[cfg(test)]
@@ -629,20 +587,20 @@ mod tests {
             create_test_chat(3, "Chat 3"),
         ]);
 
-        assert_eq!(model.selected_index, 0);
+        assert_eq!(model.selected_index(), 0);
 
         model.move_down();
-        assert_eq!(model.selected_index, 1);
+        assert_eq!(model.selected_index(), 1);
 
         model.move_down();
-        assert_eq!(model.selected_index, 2);
+        assert_eq!(model.selected_index(), 2);
 
         // Can't go past the end
         model.move_down();
-        assert_eq!(model.selected_index, 2);
+        assert_eq!(model.selected_index(), 2);
 
         model.move_up();
-        assert_eq!(model.selected_index, 1);
+        assert_eq!(model.selected_index(), 1);
     }
 
     #[test]
@@ -700,7 +658,6 @@ mod tests {
         let mut model = create_test_model();
 
         // Create chats with different timestamps to ensure deterministic sort order
-        // Most recent first, so Chat 1 at index 0, Chat 2 at index 1, Chat 3 at index 2
         let now = Utc::now();
         let mut chat1 = create_test_chat(1, "Chat 1");
         let mut chat2 = create_test_chat(2, "Chat 2");
@@ -734,5 +691,23 @@ mod tests {
 
         model.clear_new_message(1);
         assert!(!model.chats[0].has_new_message);
+    }
+
+    #[test]
+    fn test_list_state_integration() {
+        let mut model = create_test_model();
+        model.set_chats(vec![
+            create_test_chat(1, "Chat 1"),
+            create_test_chat(2, "Chat 2"),
+        ]);
+
+        // Should have first item selected by default
+        assert_eq!(model.list_state.selected(), Some(0));
+
+        model.move_down();
+        assert_eq!(model.list_state.selected(), Some(1));
+
+        model.move_up();
+        assert_eq!(model.list_state.selected(), Some(0));
     }
 }

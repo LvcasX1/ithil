@@ -238,6 +238,7 @@ impl KeyMap {
         // Common actions (both modes)
         // =====================================================================
         bindings.insert(key(KeyCode::Enter, none()), Action::OpenChat);
+        bindings.insert(key(KeyCode::Enter, shift()), Action::NewLine);
         bindings.insert(key(KeyCode::Esc, none()), Action::CancelAction);
         bindings.insert(key(KeyCode::Backspace, none()), Action::Backspace);
         bindings.insert(key(KeyCode::Delete, none()), Action::DeleteChar);

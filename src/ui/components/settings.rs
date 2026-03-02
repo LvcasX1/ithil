@@ -165,23 +165,23 @@ impl SettingsModel {
             Action::Up => {
                 self.select_previous_item();
                 None
-            }
+            },
             Action::Down => {
                 self.select_next_item();
                 None
-            }
+            },
             Action::Left => {
                 self.previous_section();
                 None
-            }
+            },
             Action::Right => {
                 self.next_section();
                 None
-            }
+            },
             Action::OpenChat | Action::FocusInput => {
                 self.start_editing();
                 None
-            }
+            },
             Action::CancelAction => Some(SettingsAction::Close),
             _ => None,
         }
@@ -193,15 +193,15 @@ impl SettingsModel {
             Action::CancelAction => {
                 self.cancel_editing();
                 None
-            }
+            },
             Action::SendMessage | Action::OpenChat => {
                 self.apply_edit();
                 None
-            }
+            },
             Action::Backspace => {
                 self.edit_value.pop();
                 None
-            }
+            },
             _ => None,
         }
     }
@@ -313,51 +313,51 @@ impl SettingsModel {
                     self.config.app.name = value;
                 }
                 // Version (item 1) is read-only
-            }
+            },
             SettingsSection::Appearance => match self.selected_item {
                 0 => self.config.ui.theme = value,
                 1 => {
                     if let Ok(v) = value.parse() {
                         self.config.ui.layout.chat_list_width = v;
                     }
-                }
+                },
                 2 => {
                     if let Ok(v) = value.parse() {
                         self.config.ui.layout.conversation_width = v;
                     }
-                }
+                },
                 3 => {
                     if let Ok(v) = value.parse() {
                         self.config.ui.layout.info_width = v;
                     }
-                }
+                },
                 4 => self.config.ui.appearance.date_format = value,
                 5 => self.config.ui.appearance.show_avatars = value.to_lowercase() == "true",
                 6 => self.config.ui.appearance.show_status_bar = value.to_lowercase() == "true",
                 7 => {
                     self.config.ui.appearance.relative_timestamps = value.to_lowercase() == "true";
-                }
-                _ => {}
+                },
+                _ => {},
             },
             SettingsSection::Keyboard => {
                 if self.selected_item == 0 {
                     self.config.ui.keyboard.vim_mode = value.to_lowercase() == "true";
                 }
-            }
+            },
             SettingsSection::Privacy => match self.selected_item {
                 0 => self.config.privacy.show_online_status = value.to_lowercase() == "true",
                 1 => self.config.privacy.show_read_receipts = value.to_lowercase() == "true",
                 2 => self.config.privacy.show_typing = value.to_lowercase() == "true",
                 3 => self.config.privacy.stealth_mode = value.to_lowercase() == "true",
-                _ => {}
+                _ => {},
             },
             SettingsSection::Credentials => match self.selected_item {
                 0 => {
                     self.config.telegram.use_default_credentials = value.to_lowercase() == "true";
-                }
+                },
                 1 => self.config.telegram.api_id = value,
                 2 => self.config.telegram.api_hash = value,
-                _ => {}
+                _ => {},
             },
         }
     }
@@ -406,7 +406,7 @@ impl SettingsModel {
             ],
             SettingsSection::Keyboard => {
                 vec![("Vim Mode", self.config.ui.keyboard.vim_mode.to_string())]
-            }
+            },
             SettingsSection::Privacy => vec![
                 (
                     "Show Online Status",
