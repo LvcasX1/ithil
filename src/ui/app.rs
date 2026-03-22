@@ -56,8 +56,9 @@ use crate::telegram::TelegramClient;
 use crate::types::{AuthState, Update, UpdateType};
 
 use super::components::{
-    AuthAction, AuthModel, ChatListAction, ChatListModel, ConversationAction, ConversationModel,
-    ConversationWidget, SettingsAction, SettingsModel, SettingsWidget,
+    AuthAction, AuthModel, ChatListAction, ChatListModel, ConnectionStatus, ConversationAction,
+    ConversationModel, ConversationWidget, SettingsAction, SettingsModel, SettingsWidget,
+    StatusBar, StatusBarWidget,
 };
 use super::keys::{Action, KeyMap};
 use super::styles::Styles;
@@ -188,6 +189,9 @@ pub struct App {
 
     /// Status message to display (for errors/info)
     pub status_message: Option<String>,
+
+    /// Status bar model
+    status_bar: StatusBar,
 }
 
 impl App {
@@ -226,6 +230,8 @@ impl App {
         let chat_list_model = ChatListModel::new(cache.clone());
         let conversation_model = ConversationModel::new();
         let settings_model = SettingsModel::new(config.clone());
+        let mut status_bar = StatusBar::new();
+        status_bar.set_vim_mode(vim_mode);
 
         Self {
             state: AppState::Loading,
@@ -245,6 +251,7 @@ impl App {
             settings_model,
             selected_chat_id: None,
             status_message: None,
+            status_bar,
         }
     }
 
@@ -1237,13 +1244,22 @@ impl App {
     fn render_main(&mut self, frame: &mut Frame) {
         let area = frame.area();
 
+        // Split into main content and status bar
+        let vertical = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .split(area);
+
+        let main_area = vertical[0];
+        let status_area = vertical[1];
+
         // Calculate layout based on config
         let constraints = self.calculate_layout_constraints();
 
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(constraints)
-            .split(area);
+            .split(main_area);
 
         // Render chat list
         self.render_chat_list_pane(frame, chunks[0]);
@@ -1255,6 +1271,30 @@ impl App {
         if self.show_sidebar && chunks.len() > 2 {
             self.render_sidebar_pane(frame, chunks[2]);
         }
+
+        // Update and render status bar
+        self.update_status_bar();
+        let widget = StatusBarWidget::new(&self.status_bar);
+        frame.render_widget(widget, status_area);
+    }
+
+    /// Update the status bar with current app state.
+    fn update_status_bar(&mut self) {
+        let conn_status = match self.auth_state {
+            AuthState::Ready => ConnectionStatus::Connected,
+            AuthState::Closed => ConnectionStatus::Disconnected,
+            _ => ConnectionStatus::Connecting,
+        };
+        self.status_bar.set_connection_status(conn_status);
+        self.status_bar
+            .set_status_message(self.status_message.clone());
+        let total_unread: i32 = self
+            .cache
+            .get_all_chats()
+            .iter()
+            .map(|c| c.unread_count)
+            .sum();
+        self.status_bar.set_unread_count(total_unread);
     }
 
     /// Calculate layout constraints based on configuration.
