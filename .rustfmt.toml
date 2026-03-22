@@ -1,0 +1,27 @@
+# Rustfmt configuration for Ithil
+# See: https://rust-lang.github.io/rustfmt/
+
+edition = "2021"
+max_width = 100
+use_small_heuristics = "Default"
+
+# Import organization
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"
+reorder_imports = true
+
+# Comments
+normalize_comments = true
+wrap_comments = true
+comment_width = 100
+
+# Formatting options
+newline_style = "Auto"
+use_field_init_shorthand = true
+use_try_shorthand = true
+
+# Match arms
+match_block_trailing_comma = true
+
+# Functions
+fn_params_layout = "Tall"
