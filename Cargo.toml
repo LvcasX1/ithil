@@ -1,0 +1,48 @@
+[package]
+name = "ithil"
+version = "0.1.4"
+edition = "2021"
+description = "A Terminal User Interface for Telegram"
+license = "MIT"
+repository = "https://github.com/lvcasx1/ithil"
+readme = "README.md"
+keywords = ["telegram", "tui", "terminal", "chat"]
+categories = ["command-line-interface"]
+rust-version = "1.75"
+
+[[bin]]
+name = "ithil"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { version = "1", features = ["full"] }
+grammers-client = "0.9"
+grammers-session = "0.9"
+grammers-tl-types = "0.9"
+dirs = "5"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+anyhow = "1"
+thiserror = "2"
+directories = "5"
+chrono = { version = "0.4", features = ["serde"] }
+unicode-width = "0.2.0"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+nursery = "warn"

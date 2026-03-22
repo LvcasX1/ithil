@@ -1,23 +1,7 @@
-# Binaries
-bin/
-tmp/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary
-*.test
-
-# Output of the go coverage tool
-*.out
-
-# Dependency directories
-vendor/
-
-# Go workspace file
-go.work
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
 
 # Config files with secrets
 config.yaml
@@ -41,14 +25,6 @@ tdlib/
 
 # Logs
 *.log
-
-# Air
-tmp/
-build-errors.log
-
-# GoReleaser
-dist/
-goreleaser.log
 
 # Claude
 CLAUDE.md
