@@ -1,15 +1,14 @@
-//! Nord color theme styles for Ithil.
+//! Terminal-native styles for Ithil.
 //!
-//! This module provides the complete Nord color palette and pre-built styles
-//! for common UI elements. The Nord theme is a cold, bluish color palette
-//! that provides excellent readability in terminal environments.
+//! This module uses ANSI named colors so the application automatically inherits
+//! the user's terminal color scheme (Tokyo Night, Dracula, Solarized, etc.).
 //!
 //! # Color Palette Structure
 //!
-//! - **Polar Night** (NORD0-3): Dark backgrounds, ranging from darkest to lightest
-//! - **Snow Storm** (NORD4-6): Light foreground colors for text
-//! - **Frost** (NORD7-10): Blue/cyan accent colors
-//! - **Aurora** (NORD11-15): Status/semantic colors (red, orange, yellow, green, purple)
+//! - **Backgrounds**: Transparent (`Reset`) to inherit the terminal background
+//! - **Foregrounds**: Default terminal fg, dimmed, and bright white
+//! - **Accents**: Cyan and Blue for focus/highlights
+//! - **Status**: Red, Yellow, Green, Magenta for semantic states
 //!
 //! # Usage
 //!
@@ -26,107 +25,66 @@
 
 use ratatui::style::{Modifier, Style};
 
-/// Nord color palette constants.
+/// Terminal-native color constants using ANSI named colors.
 ///
-/// See <https://www.nordtheme.com/docs/colors-and-palettes> for reference.
+/// These colors inherit from the user's terminal theme automatically.
 pub mod colors {
     use ratatui::style::Color;
 
     // =========================================================================
-    // Polar Night - Dark backgrounds
+    // Backgrounds
     // =========================================================================
 
-    /// NORD0 - Darkest background (#2E3440)
-    ///
-    /// Used as the main background color for the application.
-    pub const NORD0: Color = Color::Rgb(46, 52, 64);
+    /// Primary background - transparent, inherits terminal background.
+    pub const BG_PRIMARY: Color = Color::Reset;
 
-    /// NORD1 - Slightly lighter dark (#3B4252)
-    ///
-    /// Used for elevated surfaces like status bars and secondary backgrounds.
-    pub const NORD1: Color = Color::Rgb(59, 66, 82);
+    /// Elevated background - transparent, inherits terminal background.
+    pub const BG_ELEVATED: Color = Color::Reset;
 
-    /// NORD2 - Medium dark (#434C5E)
-    ///
-    /// Used for selection backgrounds and interactive states.
-    pub const NORD2: Color = Color::Rgb(67, 76, 94);
-
-    /// NORD3 - Lightest dark (#4C566A)
-    ///
-    /// Used for comments, muted text, and subtle borders.
-    pub const NORD3: Color = Color::Rgb(76, 86, 106);
+    /// Interactive background - used for selections and highlights.
+    pub const BG_INTERACTIVE: Color = Color::DarkGray;
 
     // =========================================================================
-    // Snow Storm - Light foregrounds
+    // Foregrounds
     // =========================================================================
 
-    /// NORD4 - Dark white (#D8DEE9)
-    ///
-    /// Primary text color for most content.
-    pub const NORD4: Color = Color::Rgb(216, 222, 233);
+    /// Primary text - default terminal foreground.
+    pub const FG_PRIMARY: Color = Color::Reset;
 
-    /// NORD5 - Medium white (#E5E9F0)
-    ///
-    /// Secondary text color for slightly brighter content.
-    pub const NORD5: Color = Color::Rgb(229, 233, 240);
+    /// Muted text - secondary, de-emphasized content.
+    pub const FG_MUTED: Color = Color::DarkGray;
 
-    /// NORD6 - Brightest white (#ECEFF4)
-    ///
-    /// Used for headlines, important text, and emphasis.
-    pub const NORD6: Color = Color::Rgb(236, 239, 244);
+    /// Bright text - emphasis, headlines.
+    pub const FG_BRIGHT: Color = Color::White;
 
     // =========================================================================
-    // Frost - Blue/Cyan accents
+    // Accents
     // =========================================================================
 
-    /// NORD7 - Teal (#8FBCBB)
-    ///
-    /// Used for class names and type annotations.
-    pub const NORD7: Color = Color::Rgb(143, 188, 187);
+    /// Primary accent - focus states, highlights, interactive elements.
+    pub const ACCENT_PRIMARY: Color = Color::Cyan;
 
-    /// NORD8 - Light blue (#88C0D0)
-    ///
-    /// Primary accent color, used for highlights and focus states.
-    pub const NORD8: Color = Color::Rgb(136, 192, 208);
-
-    /// NORD9 - Blue (#81A1C1)
-    ///
-    /// Used for keywords, usernames, and secondary accents.
-    pub const NORD9: Color = Color::Rgb(129, 161, 193);
-
-    /// NORD10 - Darker blue (#5E81AC)
-    ///
-    /// Used for functions and methods.
-    pub const NORD10: Color = Color::Rgb(94, 129, 172);
+    /// Secondary accent - usernames, keywords.
+    pub const ACCENT_SECONDARY: Color = Color::Blue;
 
     // =========================================================================
-    // Aurora - Status/Semantic colors
+    // Status/Semantic colors
     // =========================================================================
 
-    /// NORD11 - Red (#BF616A)
-    ///
-    /// Error states, destructive actions, and critical warnings.
-    pub const NORD11: Color = Color::Rgb(191, 97, 106);
+    /// Error states, destructive actions, offline indicators.
+    pub const STATUS_ERROR: Color = Color::Red;
 
-    /// NORD12 - Orange (#D08770)
-    ///
     /// Warning states and caution indicators.
-    pub const NORD12: Color = Color::Rgb(208, 135, 112);
+    pub const STATUS_WARNING: Color = Color::Yellow;
 
-    /// NORD13 - Yellow (#EBCB8B)
-    ///
     /// Attention-grabbing elements, pinned items.
-    pub const NORD13: Color = Color::Rgb(235, 203, 139);
+    pub const STATUS_ATTENTION: Color = Color::Yellow;
 
-    /// NORD14 - Green (#A3BE8C)
-    ///
     /// Success states, online indicators, outgoing messages.
-    pub const NORD14: Color = Color::Rgb(163, 190, 140);
+    pub const STATUS_SUCCESS: Color = Color::Green;
 
-    /// NORD15 - Purple (#B48EAD)
-    ///
-    /// Decorative accents, numbers, and constants.
-    pub const NORD15: Color = Color::Rgb(180, 142, 173);
+    /// Decorative accents.
+    pub const DECORATIVE: Color = Color::Magenta;
 }
 
 /// Pre-built styles for common UI elements.
@@ -151,35 +109,29 @@ impl Styles {
     // =========================================================================
 
     /// Standard text style.
-    ///
-    /// Uses NORD4 for good readability on dark backgrounds.
     #[must_use]
     pub const fn text() -> Style {
-        Style::new().fg(colors::NORD4)
+        Style::new().fg(colors::FG_PRIMARY)
     }
 
     /// Muted text style for less important content.
-    ///
-    /// Uses NORD3 for subtle, de-emphasized text.
     #[must_use]
     pub const fn text_muted() -> Style {
-        Style::new().fg(colors::NORD3)
+        Style::new()
+            .fg(colors::FG_MUTED)
+            .add_modifier(Modifier::DIM)
     }
 
     /// Bright text style for emphasis.
-    ///
-    /// Uses NORD6 for headlines and important text.
     #[must_use]
     pub const fn text_bright() -> Style {
-        Style::new().fg(colors::NORD6)
+        Style::new().fg(colors::FG_BRIGHT)
     }
 
     /// Accent text style.
-    ///
-    /// Uses NORD8 (light blue) for highlighted text.
     #[must_use]
     pub const fn text_accent() -> Style {
-        Style::new().fg(colors::NORD8)
+        Style::new().fg(colors::ACCENT_PRIMARY)
     }
 
     // =========================================================================
@@ -187,35 +139,27 @@ impl Styles {
     // =========================================================================
 
     /// Success/positive style.
-    ///
-    /// Uses NORD14 (green) for success messages and confirmations.
     #[must_use]
     pub const fn success() -> Style {
-        Style::new().fg(colors::NORD14)
+        Style::new().fg(colors::STATUS_SUCCESS)
     }
 
     /// Warning style.
-    ///
-    /// Uses NORD12 (orange) for warnings and cautions.
     #[must_use]
     pub const fn warning() -> Style {
-        Style::new().fg(colors::NORD12)
+        Style::new().fg(colors::STATUS_WARNING)
     }
 
     /// Error style.
-    ///
-    /// Uses NORD11 (red) for errors and critical issues.
     #[must_use]
     pub const fn error() -> Style {
-        Style::new().fg(colors::NORD11)
+        Style::new().fg(colors::STATUS_ERROR)
     }
 
     /// Informational style.
-    ///
-    /// Uses NORD9 (blue) for informational messages.
     #[must_use]
     pub const fn info() -> Style {
-        Style::new().fg(colors::NORD9)
+        Style::new().fg(colors::ACCENT_SECONDARY)
     }
 
     // =========================================================================
@@ -223,19 +167,19 @@ impl Styles {
     // =========================================================================
 
     /// Selected item style.
-    ///
-    /// Uses NORD2 background with NORD6 foreground for clear selection indication.
     #[must_use]
     pub const fn selected() -> Style {
-        Style::new().bg(colors::NORD2).fg(colors::NORD6)
+        Style::new()
+            .bg(colors::BG_INTERACTIVE)
+            .fg(colors::FG_BRIGHT)
     }
 
     /// Highlight style with bold modifier.
-    ///
-    /// Uses NORD8 with bold for emphasis without changing background.
     #[must_use]
     pub const fn highlight() -> Style {
-        Style::new().fg(colors::NORD8).add_modifier(Modifier::BOLD)
+        Style::new()
+            .fg(colors::ACCENT_PRIMARY)
+            .add_modifier(Modifier::BOLD)
     }
 
     // =========================================================================
@@ -243,19 +187,15 @@ impl Styles {
     // =========================================================================
 
     /// Default border style.
-    ///
-    /// Uses NORD3 for subtle, non-intrusive borders.
     #[must_use]
     pub const fn border() -> Style {
-        Style::new().fg(colors::NORD3)
+        Style::new().fg(colors::FG_MUTED)
     }
 
     /// Focused border style.
-    ///
-    /// Uses NORD8 (light blue) to clearly indicate focus.
     #[must_use]
     pub const fn border_focused() -> Style {
-        Style::new().fg(colors::NORD8)
+        Style::new().fg(colors::ACCENT_PRIMARY)
     }
 
     // =========================================================================
@@ -263,27 +203,25 @@ impl Styles {
     // =========================================================================
 
     /// Unread chat style.
-    ///
-    /// Uses NORD8 with bold to highlight chats with unread messages.
     #[must_use]
     pub const fn chat_unread() -> Style {
-        Style::new().fg(colors::NORD8).add_modifier(Modifier::BOLD)
+        Style::new()
+            .fg(colors::ACCENT_PRIMARY)
+            .add_modifier(Modifier::BOLD)
     }
 
     /// Pinned chat style.
-    ///
-    /// Uses NORD13 (yellow) to indicate pinned chats.
     #[must_use]
     pub const fn chat_pinned() -> Style {
-        Style::new().fg(colors::NORD13)
+        Style::new().fg(colors::STATUS_ATTENTION)
     }
 
     /// Muted chat style.
-    ///
-    /// Uses NORD3 to de-emphasize muted chats.
     #[must_use]
     pub const fn chat_muted() -> Style {
-        Style::new().fg(colors::NORD3)
+        Style::new()
+            .fg(colors::FG_MUTED)
+            .add_modifier(Modifier::DIM)
     }
 
     // =========================================================================
@@ -291,45 +229,39 @@ impl Styles {
     // =========================================================================
 
     /// Outgoing message style.
-    ///
-    /// Uses NORD14 (green) to distinguish sent messages.
     #[must_use]
     pub const fn message_outgoing() -> Style {
-        Style::new().fg(colors::NORD14)
+        Style::new().fg(colors::STATUS_SUCCESS)
     }
 
     /// Incoming message style.
-    ///
-    /// Uses NORD4 for standard received messages.
     #[must_use]
     pub const fn message_incoming() -> Style {
-        Style::new().fg(colors::NORD4)
+        Style::new().fg(colors::FG_PRIMARY)
     }
 
     /// System message style.
-    ///
-    /// Uses NORD3 with italic for system notifications.
     #[must_use]
     pub const fn message_system() -> Style {
         Style::new()
-            .fg(colors::NORD3)
+            .fg(colors::FG_MUTED)
             .add_modifier(Modifier::ITALIC)
     }
 
     /// Timestamp style.
-    ///
-    /// Uses NORD3 for subtle timestamp display.
     #[must_use]
     pub const fn timestamp() -> Style {
-        Style::new().fg(colors::NORD3)
+        Style::new()
+            .fg(colors::FG_MUTED)
+            .add_modifier(Modifier::DIM)
     }
 
     /// Username style.
-    ///
-    /// Uses NORD9 with bold to highlight sender names.
     #[must_use]
     pub const fn username() -> Style {
-        Style::new().fg(colors::NORD9).add_modifier(Modifier::BOLD)
+        Style::new()
+            .fg(colors::ACCENT_SECONDARY)
+            .add_modifier(Modifier::BOLD)
     }
 
     // =========================================================================
@@ -337,27 +269,23 @@ impl Styles {
     // =========================================================================
 
     /// Status bar background style.
-    ///
-    /// Uses NORD1 background with NORD4 text.
     #[must_use]
     pub const fn status_bar() -> Style {
-        Style::new().bg(colors::NORD1).fg(colors::NORD4)
+        Style::new()
+            .bg(colors::BG_INTERACTIVE)
+            .fg(colors::FG_PRIMARY)
     }
 
     /// Online status indicator style.
-    ///
-    /// Uses NORD14 (green) for online status.
     #[must_use]
     pub const fn status_online() -> Style {
-        Style::new().fg(colors::NORD14)
+        Style::new().fg(colors::STATUS_SUCCESS)
     }
 
     /// Offline status indicator style.
-    ///
-    /// Uses NORD11 (red) for offline status.
     #[must_use]
     pub const fn status_offline() -> Style {
-        Style::new().fg(colors::NORD11)
+        Style::new().fg(colors::STATUS_ERROR)
     }
 
     // =========================================================================
@@ -365,27 +293,25 @@ impl Styles {
     // =========================================================================
 
     /// Input field text style.
-    ///
-    /// Uses NORD4 for standard input text.
     #[must_use]
     pub const fn input() -> Style {
-        Style::new().fg(colors::NORD4)
+        Style::new().fg(colors::FG_PRIMARY)
     }
 
     /// Input cursor style.
-    ///
-    /// Uses NORD0 on NORD8 background for a visible cursor.
     #[must_use]
     pub const fn input_cursor() -> Style {
-        Style::new().fg(colors::NORD0).bg(colors::NORD8)
+        Style::new()
+            .fg(colors::BG_PRIMARY)
+            .bg(colors::ACCENT_PRIMARY)
     }
 
     /// Input placeholder style.
-    ///
-    /// Uses NORD3 for subtle placeholder text.
     #[must_use]
     pub const fn input_placeholder() -> Style {
-        Style::new().fg(colors::NORD3)
+        Style::new()
+            .fg(colors::FG_MUTED)
+            .add_modifier(Modifier::DIM)
     }
 
     // =========================================================================
@@ -393,19 +319,17 @@ impl Styles {
     // =========================================================================
 
     /// Modal background style.
-    ///
-    /// Uses NORD1 background for modal overlays.
     #[must_use]
     pub const fn modal_background() -> Style {
-        Style::new().bg(colors::NORD1)
+        Style::new().bg(colors::BG_INTERACTIVE)
     }
 
     /// Modal title style.
-    ///
-    /// Uses NORD6 with bold for modal titles.
     #[must_use]
     pub const fn modal_title() -> Style {
-        Style::new().fg(colors::NORD6).add_modifier(Modifier::BOLD)
+        Style::new()
+            .fg(colors::FG_BRIGHT)
+            .add_modifier(Modifier::BOLD)
     }
 }
 
@@ -415,25 +339,25 @@ mod tests {
     use ratatui::style::Color;
 
     #[test]
-    fn test_nord_colors_are_correct() {
-        // Verify a few key colors match the Nord specification
-        assert_eq!(colors::NORD0, Color::Rgb(46, 52, 64));
-        assert_eq!(colors::NORD8, Color::Rgb(136, 192, 208));
-        assert_eq!(colors::NORD11, Color::Rgb(191, 97, 106));
-        assert_eq!(colors::NORD14, Color::Rgb(163, 190, 140));
+    fn test_colors_are_ansi() {
+        assert_eq!(colors::BG_PRIMARY, Color::Reset);
+        assert_eq!(colors::FG_PRIMARY, Color::Reset);
+        assert_eq!(colors::ACCENT_PRIMARY, Color::Cyan);
+        assert_eq!(colors::STATUS_ERROR, Color::Red);
+        assert_eq!(colors::STATUS_SUCCESS, Color::Green);
     }
 
     #[test]
     fn test_text_style() {
         let style = Styles::text();
-        assert_eq!(style.fg, Some(colors::NORD4));
+        assert_eq!(style.fg, Some(colors::FG_PRIMARY));
     }
 
     #[test]
     fn test_selected_style() {
         let style = Styles::selected();
-        assert_eq!(style.fg, Some(colors::NORD6));
-        assert_eq!(style.bg, Some(colors::NORD2));
+        assert_eq!(style.fg, Some(colors::FG_BRIGHT));
+        assert_eq!(style.bg, Some(colors::BG_INTERACTIVE));
     }
 
     #[test]
@@ -444,15 +368,21 @@ mod tests {
 
     #[test]
     fn test_status_styles() {
-        assert_eq!(Styles::success().fg, Some(colors::NORD14));
-        assert_eq!(Styles::warning().fg, Some(colors::NORD12));
-        assert_eq!(Styles::error().fg, Some(colors::NORD11));
-        assert_eq!(Styles::info().fg, Some(colors::NORD9));
+        assert_eq!(Styles::success().fg, Some(colors::STATUS_SUCCESS));
+        assert_eq!(Styles::warning().fg, Some(colors::STATUS_WARNING));
+        assert_eq!(Styles::error().fg, Some(colors::STATUS_ERROR));
+        assert_eq!(Styles::info().fg, Some(colors::ACCENT_SECONDARY));
     }
 
     #[test]
     fn test_border_styles() {
-        assert_eq!(Styles::border().fg, Some(colors::NORD3));
-        assert_eq!(Styles::border_focused().fg, Some(colors::NORD8));
+        assert_eq!(Styles::border().fg, Some(colors::FG_MUTED));
+        assert_eq!(Styles::border_focused().fg, Some(colors::ACCENT_PRIMARY));
+    }
+
+    #[test]
+    fn test_muted_styles_have_dim() {
+        assert!(Styles::text_muted().add_modifier.contains(Modifier::DIM));
+        assert!(Styles::timestamp().add_modifier.contains(Modifier::DIM));
     }
 }
