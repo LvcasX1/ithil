@@ -494,7 +494,9 @@ impl ChatListModel {
                 .fg(colors::fg_bright())
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().bg(colors::bg_interactive()).fg(colors::fg_primary())
+            Style::default()
+                .bg(colors::bg_interactive())
+                .fg(colors::fg_primary())
         };
 
         let list = List::new(items)

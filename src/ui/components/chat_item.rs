@@ -219,7 +219,9 @@ impl<'a> ChatItemBuilder<'a> {
                     .fg(colors::bg_primary())
                     .add_modifier(Modifier::BOLD)
             } else if self.chat.is_muted {
-                Style::default().bg(colors::fg_muted()).fg(colors::bg_primary())
+                Style::default()
+                    .bg(colors::fg_muted())
+                    .fg(colors::bg_primary())
             } else {
                 Style::default()
                     .bg(colors::status_error())

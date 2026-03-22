@@ -642,9 +642,15 @@ mod tests {
         assert_eq!(Theme::from_config_str("tokyo-night"), Theme::TokyoNight);
         assert_eq!(Theme::from_config_str("tokyonight"), Theme::TokyoNight);
         assert_eq!(Theme::from_config_str("gruvbox"), Theme::Gruvbox);
-        assert_eq!(Theme::from_config_str("catppuccin-mocha"), Theme::CatppuccinMocha);
+        assert_eq!(
+            Theme::from_config_str("catppuccin-mocha"),
+            Theme::CatppuccinMocha
+        );
         assert_eq!(Theme::from_config_str("catppuccin"), Theme::CatppuccinMocha);
-        assert_eq!(Theme::from_config_str("solarized-dark"), Theme::SolarizedDark);
+        assert_eq!(
+            Theme::from_config_str("solarized-dark"),
+            Theme::SolarizedDark
+        );
         assert_eq!(Theme::from_config_str("solarized"), Theme::SolarizedDark);
         assert_eq!(Theme::from_config_str("one-dark"), Theme::OneDark);
         assert_eq!(Theme::from_config_str("unknown"), Theme::System);

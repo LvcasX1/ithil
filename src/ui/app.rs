@@ -935,6 +935,10 @@ impl App {
                 self.config = *config;
                 self.state = AppState::Main;
             },
+            SettingsAction::ThemeChanged(config) => {
+                self.config = *config;
+                self.save_settings();
+            },
         }
         None
     }

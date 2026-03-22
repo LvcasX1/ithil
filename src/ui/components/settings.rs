@@ -315,9 +315,8 @@ impl SettingsModel {
                 let theme = Theme::ALL[self.theme_selection_index];
                 theme.apply();
                 self.config.ui.theme = theme.to_config_str().to_string();
-                self.has_changes = true;
                 self.selecting_theme = false;
-                None
+                Some(SettingsAction::ThemeChanged(Box::new(self.config.clone())))
             },
             Action::CancelAction => {
                 self.selecting_theme = false;
@@ -540,13 +539,17 @@ pub enum SettingsAction {
     Close,
     /// Save and close the settings view
     SaveAndClose(Box<Config>),
+    /// Theme was changed — save config immediately
+    ThemeChanged(Box<Config>),
 }
 
 impl PartialEq for SettingsAction {
     fn eq(&self, other: &Self) -> bool {
         matches!(
             (self, other),
-            (Self::Close, Self::Close) | (Self::SaveAndClose(_), Self::SaveAndClose(_))
+            (Self::Close, Self::Close)
+                | (Self::SaveAndClose(_), Self::SaveAndClose(_))
+                | (Self::ThemeChanged(_), Self::ThemeChanged(_))
         )
     }
 }
@@ -687,7 +690,12 @@ impl SettingsWidget<'_> {
         // Center the picker in the area
         let x = area.x + area.width.saturating_sub(picker_width) / 2;
         let y = area.y + area.height.saturating_sub(picker_height) / 2;
-        let picker_area = Rect::new(x, y, picker_width.min(area.width), picker_height.min(area.height));
+        let picker_area = Rect::new(
+            x,
+            y,
+            picker_width.min(area.width),
+            picker_height.min(area.height),
+        );
 
         // Clear the area behind the picker
         Clear.render(picker_area, buf);
