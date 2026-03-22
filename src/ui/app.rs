@@ -342,8 +342,8 @@ impl App {
                 }
             }
 
-            // Process any pending Telegram updates
-            self.process_updates();
+            // Process any pending Telegram updates (sync version, no mark-as-read)
+            self.process_updates_sync();
 
             // Check if we should quit
             if self.should_quit {
@@ -385,7 +385,7 @@ impl App {
             }
 
             // Process any pending Telegram updates
-            self.process_updates();
+            self.process_updates().await;
 
             // Check if we should quit
             if self.should_quit {
@@ -445,7 +445,7 @@ impl App {
                     }
 
                     // Process any pending Telegram updates
-                    self.process_updates();
+                    self.process_updates().await;
                 }
 
                 // Poll the connection handle (only if not already complete)
@@ -721,6 +721,12 @@ impl App {
                 self.set_status_message(format!("Failed to load messages: {e}"));
             },
         }
+
+        // Mark chat as read
+        if let Err(e) = self.telegram.mark_as_read(chat_id).await {
+            tracing::warn!("Failed to mark chat {} as read: {}", chat_id, e);
+        }
+        self.refresh_chat_list();
     }
 
     /// Handle a key event.
@@ -938,8 +944,22 @@ impl App {
         }
     }
 
+    /// Process pending Telegram updates (sync version, no mark-as-read).
+    fn process_updates_sync(&mut self) {
+        let updates: Vec<Update> = self.update_rx.as_mut().map_or_else(Vec::new, |rx| {
+            let mut collected = Vec::new();
+            while let Ok(update) = rx.try_recv() {
+                collected.push(update);
+            }
+            collected
+        });
+        for update in updates {
+            self.handle_update(update);
+        }
+    }
+
     /// Process pending Telegram updates from the channel.
-    fn process_updates(&mut self) {
+    async fn process_updates(&mut self) {
         // Collect updates first to avoid borrowing issues
         let updates: Vec<Update> = self.update_rx.as_mut().map_or_else(Vec::new, |rx| {
             let mut collected = Vec::new();
@@ -949,33 +969,72 @@ impl App {
             collected
         });
 
+        // Track whether we received new messages for the active chat
+        let mut should_mark_read = false;
+
         // Now process all collected updates
+        for update in &updates {
+            if update.update_type == UpdateType::NewMessage
+                && self.selected_chat_id == Some(update.chat_id)
+                && self.focused_pane != FocusedPane::ChatList
+            {
+                should_mark_read = true;
+            }
+        }
+
         for update in updates {
             self.handle_update(update);
+        }
+
+        // Mark active chat as read if we got new messages while viewing it
+        if should_mark_read {
+            if let Some(chat_id) = self.selected_chat_id {
+                if let Err(e) = self.telegram.mark_as_read(chat_id).await {
+                    tracing::warn!("Failed to mark chat {} as read: {}", chat_id, e);
+                }
+                self.refresh_chat_list();
+            }
         }
     }
 
     /// Handle a single Telegram update.
     pub fn handle_update(&mut self, update: Update) {
+        let is_selected_chat = self.selected_chat_id == Some(update.chat_id);
+
         match update.update_type {
             UpdateType::NewMessage => {
                 if let Some(msg) = update.message {
-                    self.cache.add_message(update.chat_id, *msg);
+                    let msg = *msg;
+                    self.cache.add_message(update.chat_id, msg.clone());
+                    // Update conversation view if this is the active chat
+                    if is_selected_chat {
+                        self.conversation_model.add_message(msg);
+                    }
+                    // Refresh chat list to update last message / order
+                    self.refresh_chat_list();
                 }
             },
             UpdateType::MessageEdited => {
                 if let Some(msg) = update.message {
-                    self.cache.update_message(update.chat_id, *msg);
+                    let msg = *msg;
+                    self.cache.update_message(update.chat_id, msg.clone());
+                    if is_selected_chat {
+                        self.conversation_model.update_message(msg);
+                    }
                 }
             },
             UpdateType::MessageDeleted => {
                 if let crate::types::UpdateData::Integer(msg_id) = update.data {
                     self.cache.delete_message(update.chat_id, msg_id);
+                    if is_selected_chat {
+                        self.conversation_model.delete_message(msg_id);
+                    }
                 }
             },
             UpdateType::NewChat => {
                 if let crate::types::UpdateData::Chat(chat) = update.data {
                     self.cache.set_chat(*chat);
+                    self.refresh_chat_list();
                 }
             },
             UpdateType::UserStatus => {
