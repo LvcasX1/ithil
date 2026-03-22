@@ -8,7 +8,7 @@
 //! - [`app`]: Main application state machine and rendering
 //! - [`components`]: Reusable UI components (input, auth, etc.)
 //! - [`keys`]: Key bindings system with Vim/standard mode support
-//! - [`styles`]: Nord color theme and pre-built styles
+//! - [`styles`]: Theme-aware color palettes and pre-built styles
 //!
 //! # Quick Start
 //!
@@ -37,4 +37,4 @@ pub mod styles;
 pub use app::{App, AppAction, AppState, FocusedPane};
 pub use components::{AuthAction, AuthModel, InputComponent};
 pub use keys::{Action, KeyMap};
-pub use styles::{colors, Styles};
+pub use styles::{colors, Styles, Theme};

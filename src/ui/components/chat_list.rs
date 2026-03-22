@@ -440,9 +440,9 @@ impl ChatListModel {
 
         // Determine border style based on focus
         let border_style = if self.focused {
-            Style::default().fg(colors::ACCENT_PRIMARY)
+            Style::default().fg(colors::accent_primary())
         } else {
-            Style::default().fg(colors::FG_MUTED)
+            Style::default().fg(colors::fg_muted())
         };
 
         let block = Block::default()
@@ -490,11 +490,11 @@ impl ChatListModel {
         // Create the List widget with Ratatui's standard patterns
         let highlight_style = if self.focused {
             Style::default()
-                .bg(colors::BG_INTERACTIVE)
-                .fg(colors::FG_BRIGHT)
+                .bg(colors::bg_interactive())
+                .fg(colors::fg_bright())
                 .add_modifier(Modifier::BOLD)
         } else {
-            Style::default().bg(colors::BG_INTERACTIVE).fg(colors::FG_PRIMARY)
+            Style::default().bg(colors::bg_interactive()).fg(colors::fg_primary())
         };
 
         let list = List::new(items)

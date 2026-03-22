@@ -138,11 +138,11 @@ impl<'a> ChatItemBuilder<'a> {
         // Title styling: bold, and highlighted if has new messages
         let title_style = if self.chat.has_new_message {
             Style::default()
-                .fg(colors::FG_BRIGHT)
+                .fg(colors::fg_bright())
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default()
-                .fg(colors::FG_PRIMARY)
+                .fg(colors::fg_primary())
                 .add_modifier(Modifier::BOLD)
         };
         spans.push(Span::styled(truncated_title, title_style));
@@ -177,7 +177,7 @@ impl<'a> ChatItemBuilder<'a> {
             spans.push(Span::raw(" "));
             spans.push(Span::styled(
                 "📌".to_string(),
-                Style::default().fg(colors::STATUS_ATTENTION),
+                Style::default().fg(colors::status_attention()),
             ));
         }
 
@@ -186,7 +186,7 @@ impl<'a> ChatItemBuilder<'a> {
             spans.push(Span::raw(" "));
             spans.push(Span::styled(
                 "🔇".to_string(),
-                Style::default().fg(colors::FG_MUTED),
+                Style::default().fg(colors::fg_muted()),
             ));
         }
 
@@ -195,7 +195,7 @@ impl<'a> ChatItemBuilder<'a> {
             spans.push(Span::raw(" "));
             spans.push(Span::styled(
                 "●".to_string(),
-                Style::default().fg(colors::STATUS_SUCCESS),
+                Style::default().fg(colors::status_success()),
             ));
         }
     }
@@ -215,15 +215,15 @@ impl<'a> ChatItemBuilder<'a> {
             // Style based on importance
             let badge_style = if self.chat.has_new_message {
                 Style::default()
-                    .bg(colors::ACCENT_PRIMARY)
-                    .fg(colors::BG_PRIMARY)
+                    .bg(colors::accent_primary())
+                    .fg(colors::bg_primary())
                     .add_modifier(Modifier::BOLD)
             } else if self.chat.is_muted {
-                Style::default().bg(colors::FG_MUTED).fg(colors::BG_PRIMARY)
+                Style::default().bg(colors::fg_muted()).fg(colors::bg_primary())
             } else {
                 Style::default()
-                    .bg(colors::STATUS_ERROR)
-                    .fg(colors::BG_PRIMARY)
+                    .bg(colors::status_error())
+                    .fg(colors::bg_primary())
                     .add_modifier(Modifier::BOLD)
             };
 
@@ -253,7 +253,7 @@ impl<'a> ChatItemBuilder<'a> {
         let truncated = truncate_string(&preview_text, max_len);
 
         let style = Style::default()
-            .fg(colors::FG_MUTED)
+            .fg(colors::fg_muted())
             .add_modifier(Modifier::ITALIC);
 
         Some(Line::from(vec![

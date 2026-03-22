@@ -44,6 +44,9 @@ async fn main() -> Result<()> {
     // Validate configuration
     config.validate().context("Invalid configuration")?;
 
+    // Apply theme from config
+    ithil::ui::Theme::from_config_str(&config.ui.theme).apply();
+
     // Set up logging
     setup_logging(&config, cli.debug)?;
 

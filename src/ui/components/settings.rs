@@ -30,12 +30,12 @@ use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Widget},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Widget},
 };
 
 use crate::app::Config;
 use crate::ui::keys::Action;
-use crate::ui::styles::Styles;
+use crate::ui::styles::{Styles, Theme};
 
 /// Settings section identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -121,6 +121,10 @@ pub struct SettingsModel {
     pub edit_value: String,
     /// Whether there are unsaved changes
     pub has_changes: bool,
+    /// Whether the theme picker modal is open
+    pub selecting_theme: bool,
+    /// Currently highlighted theme in the picker
+    pub theme_selection_index: usize,
 }
 
 impl SettingsModel {
@@ -142,6 +146,11 @@ impl SettingsModel {
     /// ```
     #[must_use]
     pub fn new(config: Config) -> Self {
+        let current_theme = Theme::from_config_str(&config.ui.theme);
+        let theme_index = Theme::ALL
+            .iter()
+            .position(|t| *t == current_theme)
+            .unwrap_or(0);
         Self {
             config,
             current_section: SettingsSection::default(),
@@ -149,6 +158,8 @@ impl SettingsModel {
             editing: false,
             edit_value: String::new(),
             has_changes: false,
+            selecting_theme: false,
+            theme_selection_index: theme_index,
         }
     }
 
@@ -157,6 +168,10 @@ impl SettingsModel {
     /// Returns a [`SettingsAction`] if the action triggers an external
     /// operation (like closing the settings).
     pub fn handle_action(&mut self, action: Action) -> Option<SettingsAction> {
+        if self.selecting_theme {
+            return self.handle_theme_picker_action(action);
+        }
+
         if self.editing {
             return self.handle_edit_action(action);
         }
@@ -179,7 +194,12 @@ impl SettingsModel {
                 None
             },
             Action::OpenChat | Action::FocusInput => {
-                self.start_editing();
+                // Open theme picker for Theme item in Appearance section
+                if self.current_section == SettingsSection::Appearance && self.selected_item == 0 {
+                    self.open_theme_picker();
+                } else {
+                    self.start_editing();
+                }
                 None
             },
             Action::CancelAction => Some(SettingsAction::Close),
@@ -264,6 +284,53 @@ impl SettingsModel {
         }
         self.editing = false;
         self.edit_value.clear();
+    }
+
+    /// Opens the theme picker modal.
+    fn open_theme_picker(&mut self) {
+        let current_theme = Theme::from_config_str(&self.config.ui.theme);
+        self.theme_selection_index = Theme::ALL
+            .iter()
+            .position(|t| *t == current_theme)
+            .unwrap_or(0);
+        self.selecting_theme = true;
+    }
+
+    /// Handles actions while the theme picker is open.
+    fn handle_theme_picker_action(&mut self, action: Action) -> Option<SettingsAction> {
+        match action {
+            Action::Up => {
+                if self.theme_selection_index > 0 {
+                    self.theme_selection_index -= 1;
+                }
+                None
+            },
+            Action::Down => {
+                if self.theme_selection_index < Theme::ALL.len() - 1 {
+                    self.theme_selection_index += 1;
+                }
+                None
+            },
+            Action::OpenChat | Action::SendMessage | Action::FocusInput => {
+                let theme = Theme::ALL[self.theme_selection_index];
+                theme.apply();
+                self.config.ui.theme = theme.to_config_str().to_string();
+                self.has_changes = true;
+                self.selecting_theme = false;
+                None
+            },
+            Action::CancelAction => {
+                self.selecting_theme = false;
+                None
+            },
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the theme picker is open.
+    #[must_use]
+    pub const fn is_selecting_theme(&self) -> bool {
+        self.selecting_theme
     }
 
     /// Gets the current value of the selected item.
@@ -377,7 +444,12 @@ impl SettingsModel {
                 ("Version", self.config.app.version.clone()),
             ],
             SettingsSection::Appearance => vec![
-                ("Theme", self.config.ui.theme.clone()),
+                (
+                    "Theme",
+                    Theme::from_config_str(&self.config.ui.theme)
+                        .name()
+                        .to_string(),
+                ),
                 (
                     "Chat List Width %",
                     self.config.ui.layout.chat_list_width.to_string(),
@@ -445,12 +517,19 @@ impl SettingsModel {
 
     /// Resets the model to its initial state with the given config.
     pub fn reset(&mut self, config: Config) {
+        let current_theme = Theme::from_config_str(&config.ui.theme);
+        let theme_index = Theme::ALL
+            .iter()
+            .position(|t| *t == current_theme)
+            .unwrap_or(0);
         self.config = config;
         self.current_section = SettingsSection::default();
         self.selected_item = 0;
         self.editing = false;
         self.edit_value.clear();
         self.has_changes = false;
+        self.selecting_theme = false;
+        self.theme_selection_index = theme_index;
     }
 }
 
@@ -505,6 +584,11 @@ impl Widget for SettingsWidget<'_> {
         self.render_tabs(chunks[0], buf);
         self.render_content(chunks[1], buf);
         self.render_help(chunks[2], buf);
+
+        // Render theme picker overlay if open
+        if self.model.selecting_theme {
+            self.render_theme_picker(area, buf);
+        }
     }
 }
 
@@ -580,7 +664,9 @@ impl SettingsWidget<'_> {
 
     /// Renders the help line.
     fn render_help(&self, area: Rect, buf: &mut Buffer) {
-        let help = if self.model.editing {
+        let help = if self.model.selecting_theme {
+            "↑/↓ navigate, Enter to select, Esc to cancel"
+        } else if self.model.editing {
             "Enter to save, Esc to cancel"
         } else if self.model.has_changes {
             "Changes pending - Enter to edit, Esc to close (changes will be lost)"
@@ -590,6 +676,55 @@ impl SettingsWidget<'_> {
 
         let help_para = Paragraph::new(help).style(Styles::text_muted());
         help_para.render(area, buf);
+    }
+
+    /// Renders the theme picker modal overlay.
+    fn render_theme_picker(&self, area: Rect, buf: &mut Buffer) {
+        let themes = Theme::ALL;
+        let picker_height = (themes.len() as u16) + 2; // +2 for border
+        let picker_width = 30;
+
+        // Center the picker in the area
+        let x = area.x + area.width.saturating_sub(picker_width) / 2;
+        let y = area.y + area.height.saturating_sub(picker_height) / 2;
+        let picker_area = Rect::new(x, y, picker_width.min(area.width), picker_height.min(area.height));
+
+        // Clear the area behind the picker
+        Clear.render(picker_area, buf);
+
+        let block = Block::default()
+            .title(" Select Theme ")
+            .borders(Borders::ALL)
+            .border_style(Styles::border_focused());
+
+        let inner = block.inner(picker_area);
+        block.render(picker_area, buf);
+
+        let items: Vec<ListItem> = themes
+            .iter()
+            .enumerate()
+            .map(|(idx, theme)| {
+                let is_selected = idx == self.model.theme_selection_index;
+                let current = Theme::from_config_str(&self.model.config.ui.theme);
+                let is_current = *theme == current;
+
+                let marker = if is_current { " ● " } else { "   " };
+                let style = if is_selected {
+                    Styles::selected()
+                } else {
+                    Styles::text()
+                };
+
+                let line = Line::from(vec![
+                    Span::styled(marker, Styles::text_accent()),
+                    Span::styled(theme.name(), style),
+                ]);
+                ListItem::new(line)
+            })
+            .collect();
+
+        let list = List::new(items);
+        list.render(inner, buf);
     }
 }
 
