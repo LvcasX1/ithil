@@ -25,8 +25,8 @@ impl Credentials {
     ///
     /// In a production build, these would be replaced with actual default credentials
     /// or the application would require users to provide their own.
-    pub const DEFAULT_API_ID: i32 = 0;
-    pub const DEFAULT_API_HASH: &'static str = "";
+    pub const DEFAULT_API_ID: i32 = 23883389;
+    pub const DEFAULT_API_HASH: &'static str = "d817d412503c7e65b7e3250fcac047cc";
 
     /// Create credentials from configuration.
     ///
