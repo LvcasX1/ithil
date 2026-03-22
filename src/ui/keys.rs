@@ -231,6 +231,7 @@ impl KeyMap {
         bindings.insert(key(KeyCode::Char('3'), ctrl()), Action::FocusSidebar);
         bindings.insert(key(KeyCode::Char('s'), ctrl()), Action::ToggleSidebar);
         bindings.insert(key(KeyCode::Char(','), ctrl()), Action::OpenSettings);
+        bindings.insert(key(KeyCode::Char('p'), ctrl()), Action::OpenSettings);
         bindings.insert(key(KeyCode::F(12), none()), Action::OpenSettings);
 
         // =====================================================================
@@ -380,7 +381,7 @@ impl KeyMap {
                 ("Tab", "Next pane"),
                 ("Shift+Tab", "Previous pane"),
                 ("Ctrl+S", "Toggle sidebar / Save"),
-                ("Ctrl+,/F12", "Open settings"),
+                ("Ctrl+P/F12", "Open settings"),
                 ("S", "Toggle stealth mode"),
                 ("?", "Toggle help"),
                 ("Esc", "Back / Cancel"),
@@ -402,7 +403,7 @@ impl KeyMap {
                 ("Tab", "Next pane"),
                 ("Shift+Tab", "Previous pane"),
                 ("Ctrl+S", "Toggle sidebar / Save"),
-                ("Ctrl+,/F12", "Open settings"),
+                ("Ctrl+P/F12", "Open settings"),
                 ("S", "Toggle stealth mode"),
                 ("?", "Toggle help"),
                 ("Esc", "Back / Cancel"),

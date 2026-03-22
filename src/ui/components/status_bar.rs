@@ -203,7 +203,7 @@ impl Widget for StatusBarWidget<'_> {
             .model
             .status_message
             .as_deref()
-            .unwrap_or("? Help  Ctrl+, Settings");
+            .unwrap_or("? Help  Ctrl+P Settings");
         let center = Line::from(vec![Span::styled(center_text, Styles::text_muted())]);
         Paragraph::new(center)
             .alignment(Alignment::Center)
