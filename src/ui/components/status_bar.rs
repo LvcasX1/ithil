@@ -198,14 +198,18 @@ impl Widget for StatusBarWidget<'_> {
         ]);
         Paragraph::new(left).render(chunks[0], buf);
 
-        // Center section: status message or app name
-        let center_text = self.model.status_message.as_deref().unwrap_or("Ithil");
+        // Center section: status message or key hints
+        let center_text = self
+            .model
+            .status_message
+            .as_deref()
+            .unwrap_or("? Help  Ctrl+, Settings");
         let center = Line::from(vec![Span::styled(center_text, Styles::text_muted())]);
         Paragraph::new(center)
             .alignment(Alignment::Center)
             .render(chunks[1], buf);
 
-        // Right section: unread count + vim mode indicator
+        // Right section: unread count + vim mode + version
         let mut right_spans = Vec::new();
 
         if self.model.total_unread > 0 {
@@ -216,9 +220,13 @@ impl Widget for StatusBarWidget<'_> {
         }
 
         if self.model.vim_mode {
-            right_spans.push(Span::styled("[VIM]", Styles::text_accent()));
+            right_spans.push(Span::styled("[VIM] ", Styles::text_accent()));
         }
 
+        right_spans.push(Span::styled(
+            concat!("v", env!("CARGO_PKG_VERSION")),
+            Styles::text_muted(),
+        ));
         right_spans.push(Span::raw(" "));
 
         let right = Line::from(right_spans);

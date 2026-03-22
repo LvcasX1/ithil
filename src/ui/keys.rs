@@ -131,6 +131,12 @@ pub enum Action {
     ScrollUp,
     /// Scroll down one line
     ScrollDown,
+
+    // =========================================================================
+    // Settings Actions
+    // =========================================================================
+    /// Save settings to config file
+    SaveSettings,
 }
 
 impl std::fmt::Display for Action {
@@ -172,6 +178,7 @@ impl std::fmt::Display for Action {
             Self::DeleteChar => write!(f, "Delete Char"),
             Self::ScrollUp => write!(f, "Scroll Up"),
             Self::ScrollDown => write!(f, "Scroll Down"),
+            Self::SaveSettings => write!(f, "Save Settings"),
         }
     }
 }
@@ -359,7 +366,7 @@ impl KeyMap {
                 ("j/k", "Navigate up/down"),
                 ("h/l", "Navigate left/right"),
                 ("g/G", "Go to start/end"),
-                ("Enter", "Open chat"),
+                ("Enter", "Open chat / Edit value"),
                 ("i", "Focus input"),
                 ("/", "Search"),
                 ("r", "Reply"),
@@ -371,8 +378,11 @@ impl KeyMap {
                 ("m", "Mute/unmute"),
                 ("Tab", "Next pane"),
                 ("Shift+Tab", "Previous pane"),
-                ("Ctrl+S", "Toggle sidebar"),
+                ("Ctrl+S", "Toggle sidebar / Save"),
+                ("Ctrl+,", "Open settings"),
+                ("S", "Toggle stealth mode"),
                 ("?", "Toggle help"),
+                ("Esc", "Back / Cancel"),
                 ("Ctrl+Q", "Quit"),
             ]
         } else {
@@ -380,7 +390,7 @@ impl KeyMap {
                 ("↑/↓", "Navigate up/down"),
                 ("←/→", "Navigate left/right"),
                 ("Home/End", "Go to start/end"),
-                ("Enter", "Open/Select"),
+                ("Enter", "Open / Edit value"),
                 ("Ctrl+F", "Search"),
                 ("Ctrl+R", "Reply"),
                 ("Ctrl+E", "Edit"),
@@ -390,8 +400,11 @@ impl KeyMap {
                 ("F5", "Mark as read"),
                 ("Tab", "Next pane"),
                 ("Shift+Tab", "Previous pane"),
-                ("Ctrl+S", "Toggle sidebar"),
+                ("Ctrl+S", "Toggle sidebar / Save"),
+                ("Ctrl+,", "Open settings"),
+                ("S", "Toggle stealth mode"),
                 ("?", "Toggle help"),
+                ("Esc", "Back / Cancel"),
                 ("Ctrl+Q", "Quit"),
             ]
         }

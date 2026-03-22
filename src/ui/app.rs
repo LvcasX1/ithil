@@ -57,7 +57,7 @@ use crate::types::{AuthState, Update, UpdateType};
 
 use super::components::{
     AuthAction, AuthModel, ChatListAction, ChatListModel, ConversationAction, ConversationModel,
-    ConversationWidget,
+    ConversationWidget, SettingsAction, SettingsModel, SettingsWidget,
 };
 use super::keys::{Action, KeyMap};
 use super::styles::Styles;
@@ -180,6 +180,9 @@ pub struct App {
     /// Conversation UI model
     conversation_model: ConversationModel,
 
+    /// Settings UI model
+    settings_model: SettingsModel,
+
     /// Currently selected chat ID (for conversation view)
     selected_chat_id: Option<i64>,
 
@@ -222,6 +225,7 @@ impl App {
         let show_sidebar = config.ui.layout.show_info_pane;
         let chat_list_model = ChatListModel::new(cache.clone());
         let conversation_model = ConversationModel::new();
+        let settings_model = SettingsModel::new(config.clone());
 
         Self {
             state: AppState::Loading,
@@ -238,6 +242,7 @@ impl App {
             auth_model: AuthModel::new(),
             chat_list_model,
             conversation_model,
+            settings_model,
             selected_chat_id: None,
             status_message: None,
         }
@@ -748,6 +753,11 @@ impl App {
             return None;
         }
 
+        // Handle settings state - forward all keys to SettingsModel
+        if self.state == AppState::Settings {
+            return self.handle_settings_key(key);
+        }
+
         // Handle chat list input when focused
         if self.state == AppState::Main && self.focused_pane == FocusedPane::ChatList {
             match self.chat_list_model.handle_input(key) {
@@ -857,17 +867,98 @@ impl App {
             return self.handle_action(action);
         }
 
-        // Handle raw key codes for state-specific behavior
-        match self.state {
-            AppState::Settings => {
-                if key.code == crossterm::event::KeyCode::Esc {
-                    self.state = AppState::Main;
-                }
-            },
-            AppState::Loading | AppState::Main | AppState::Auth => {},
+        None
+    }
+
+    /// Handle key events in the Settings state.
+    fn handle_settings_key(&mut self, key: KeyEvent) -> Option<AppAction> {
+        // Ctrl+S saves settings (overrides global ToggleSidebar binding)
+        if key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+            && key.code == crossterm::event::KeyCode::Char('s')
+        {
+            self.save_settings();
+            return None;
+        }
+
+        // Map key to action and forward to settings model
+        if let Some(action) = self.keymap.get_action(&key) {
+            // Only forward relevant actions; block global actions except Quit
+            match action {
+                Action::Quit => {
+                    self.should_quit = true;
+                    return Some(AppAction::Quit);
+                },
+                Action::Up
+                | Action::Down
+                | Action::Left
+                | Action::Right
+                | Action::OpenChat
+                | Action::FocusInput
+                | Action::CancelAction
+                | Action::SendMessage
+                | Action::Backspace => {
+                    if let Some(settings_action) = self.settings_model.handle_action(action) {
+                        return self.handle_settings_action(settings_action);
+                    }
+                },
+                _ => {},
+            }
+            return None;
+        }
+
+        // Forward character input when editing
+        if let crossterm::event::KeyCode::Char(c) = key.code {
+            if key.modifiers.is_empty() || key.modifiers == crossterm::event::KeyModifiers::SHIFT {
+                self.settings_model.handle_char(c);
+            }
         }
 
         None
+    }
+
+    /// Handle a settings action result.
+    fn handle_settings_action(&mut self, action: SettingsAction) -> Option<AppAction> {
+        match action {
+            SettingsAction::Close => {
+                self.state = AppState::Main;
+            },
+            SettingsAction::SaveAndClose(config) => {
+                self.config = *config;
+                self.state = AppState::Main;
+            },
+        }
+        None
+    }
+
+    /// Save the current settings to the config file.
+    fn save_settings(&mut self) {
+        let new_config = self.settings_model.get_modified_config();
+
+        // Validate before saving
+        if let Err(e) = new_config.validate() {
+            self.set_status_message(format!("Invalid config: {e}"));
+            return;
+        }
+
+        // Save to ~/.config/ithil/config.yaml
+        let config_path = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".config")
+            .join("ithil")
+            .join("config.yaml");
+
+        match new_config.save(&config_path) {
+            Ok(()) => {
+                self.config = new_config;
+                self.settings_model.has_changes = false;
+                self.set_status_message("Settings saved".to_string());
+            },
+            Err(e) => {
+                self.set_status_message(format!("Failed to save settings: {e}"));
+            },
+        }
     }
 
     /// Handle an action from the keymap.
@@ -920,12 +1011,12 @@ impl App {
                 None
             },
             Action::OpenSettings => {
+                self.settings_model.reset(self.config.clone());
                 self.state = AppState::Settings;
                 None
             },
             Action::CancelAction => {
                 match self.state {
-                    AppState::Settings => self.state = AppState::Main,
                     AppState::Auth => {
                         self.should_quit = true;
                         return Some(AppAction::Quit);
@@ -1257,42 +1348,8 @@ impl App {
         let inner = block.inner(area);
         frame.render_widget(block, area);
 
-        let vim_status = if self.config.ui.keyboard.vim_mode {
-            "Enabled"
-        } else {
-            "Disabled"
-        };
-
-        let content = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(Span::styled("Settings", Styles::highlight())),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("Vim Mode: ", Styles::text()),
-                Span::styled(vim_status, Styles::text_accent()),
-            ]),
-            Line::from(vec![
-                Span::styled("Theme: ", Styles::text()),
-                Span::styled(&self.config.ui.theme, Styles::text_accent()),
-            ]),
-            Line::from(vec![
-                Span::styled("Show Sidebar: ", Styles::text()),
-                Span::styled(
-                    if self.show_sidebar { "Yes" } else { "No" },
-                    Styles::text_accent(),
-                ),
-            ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "(Full settings in Phase 8)",
-                Styles::text_muted(),
-            )),
-            Line::from(""),
-            Line::from(Span::styled("Press Esc to go back", Styles::text_muted())),
-        ])
-        .alignment(Alignment::Center);
-
-        frame.render_widget(content, inner);
+        let widget = SettingsWidget::new(&self.settings_model);
+        frame.render_widget(widget, inner);
     }
 
     /// Render the help overlay.
@@ -1485,7 +1542,12 @@ mod tests {
         let mut app = create_test_app();
         app.state = AppState::Settings;
 
-        app.handle_action(Action::CancelAction);
+        // Settings key events go through handle_settings_key, not handle_action
+        let esc_key = KeyEvent::new(
+            crossterm::event::KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key(esc_key);
 
         assert_eq!(app.state, AppState::Main);
     }

@@ -277,7 +277,7 @@ impl Default for LayoutConfig {
             chat_list_width: 25,
             conversation_width: 50,
             info_width: 25,
-            show_info_pane: true,
+            show_info_pane: false,
         }
     }
 }
