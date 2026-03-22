@@ -199,7 +199,10 @@ fn is_today<Tz: chrono::TimeZone>(time: &DateTime<Tz>, now: &DateTime<Local>) ->
 /// Checks if a datetime is yesterday.
 fn is_yesterday<Tz: chrono::TimeZone>(time: &DateTime<Tz>, now: &DateTime<Local>) -> bool {
     let time_local = time.with_timezone(&Local);
-    let yesterday = now.date_naive().pred_opt().unwrap_or(now.date_naive());
+    let yesterday = now
+        .date_naive()
+        .pred_opt()
+        .unwrap_or_else(|| now.date_naive());
     time_local.date_naive() == yesterday
 }
 

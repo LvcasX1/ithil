@@ -8,8 +8,6 @@
 //! - Chat updates
 //! - User status changes
 
-use std::ops::Deref;
-
 use grammers_client::client::UpdateStream;
 use grammers_client::update::Update as GrammersUpdate;
 use tracing::{debug, error, info, trace, warn};
@@ -126,6 +124,7 @@ impl TelegramClient {
     ///
     /// This signals the update loop to stop at its next iteration.
     /// The loop may not stop immediately if it's waiting for an update.
+    #[allow(clippy::unused_async)]
     pub async fn stop_update_loop(&self) {
         if self.is_update_loop_running() {
             info!("Stopping update loop...");
@@ -142,7 +141,7 @@ impl TelegramClient {
                 trace!("Received new message: {}", msg.id());
 
                 // The update::Message derefs to message::Message
-                let message = grammers_message_to_message(msg.deref());
+                let message = grammers_message_to_message(&msg);
                 let chat_id = message.chat_id;
 
                 // Update cache
@@ -166,7 +165,7 @@ impl TelegramClient {
             GrammersUpdate::NewMessage(msg) if msg.outgoing() => {
                 trace!("Received outgoing message confirmation: {}", msg.id());
 
-                let message = grammers_message_to_message(msg.deref());
+                let message = grammers_message_to_message(&msg);
                 let chat_id = message.chat_id;
 
                 // Update cache - the message might already be there from send_message
@@ -189,7 +188,7 @@ impl TelegramClient {
             GrammersUpdate::MessageEdited(msg) => {
                 trace!("Received message edit: {}", msg.id());
 
-                let message = grammers_message_to_message(msg.deref());
+                let message = grammers_message_to_message(&msg);
                 let chat_id = message.chat_id;
 
                 // Update cache
@@ -238,6 +237,7 @@ impl TelegramClient {
     }
 
     /// Handles raw updates that aren't directly supported by grammers' high-level API.
+    #[allow(clippy::unused_async)]
     async fn handle_raw_update(
         &self,
         update: grammers_client::tl::enums::Update,
@@ -356,7 +356,7 @@ impl TelegramClient {
 
                 // Update cache
                 if let Some(mut chat) = self.cache().get_chat(chat_id) {
-                    chat.draft_message = draft_text.clone();
+                    draft_text.clone_into(&mut chat.draft_message);
                     self.cache().set_chat(chat);
                 }
 
@@ -388,7 +388,7 @@ impl TelegramClient {
 }
 
 /// Converts a TL Peer to a chat ID.
-fn peer_to_chat_id(peer: &grammers_client::tl::enums::Peer) -> i64 {
+const fn peer_to_chat_id(peer: &grammers_client::tl::enums::Peer) -> i64 {
     use grammers_client::tl::enums::Peer;
 
     match peer {
@@ -398,8 +398,8 @@ fn peer_to_chat_id(peer: &grammers_client::tl::enums::Peer) -> i64 {
     }
 }
 
-/// Converts a TL UserStatus to our UserStatus type.
-fn tl_status_to_user_status(
+/// Converts a TL `UserStatus` to our `UserStatus` type.
+const fn tl_status_to_user_status(
     status: &grammers_client::tl::enums::UserStatus,
 ) -> crate::types::UserStatus {
     use crate::types::UserStatus;
@@ -407,11 +407,10 @@ fn tl_status_to_user_status(
 
     match status {
         TlStatus::Online(_) => UserStatus::Online,
-        TlStatus::Offline(_) => UserStatus::Offline,
+        TlStatus::Offline(_) | TlStatus::Empty => UserStatus::Offline,
         TlStatus::Recently(_) => UserStatus::Recently,
         TlStatus::LastWeek(_) => UserStatus::LastWeek,
         TlStatus::LastMonth(_) => UserStatus::LastMonth,
-        TlStatus::Empty => UserStatus::Offline,
     }
 }
 

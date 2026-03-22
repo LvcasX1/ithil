@@ -74,7 +74,7 @@ impl TelegramClient {
             .next()
             .await
             .map_err(TelegramError::from)?
-            .ok_or_else(|| TelegramError::MessageNotFound(message_id))?;
+            .ok_or(TelegramError::MessageNotFound(message_id))?;
 
         // Verify this is the message we want
         if i64::from(msg.id()) != message_id {
@@ -82,9 +82,7 @@ impl TelegramClient {
         }
 
         // Get the media
-        let media = msg
-            .media()
-            .ok_or_else(|| TelegramError::NoMedia(message_id))?;
+        let media = msg.media().ok_or(TelegramError::NoMedia(message_id))?;
 
         // Verify it's a photo
         if !matches!(media, grammers_client::media::Media::Photo(_)) {
@@ -97,7 +95,7 @@ impl TelegramClient {
             .map_err(|e| TelegramError::Io(e.to_string()))?;
 
         // Generate filename based on photo ID and chat
-        let filename = format!("photo_{}_{}.jpg", chat_id, message_id);
+        let filename = format!("photo_{chat_id}_{message_id}.jpg");
         let file_path = download_dir.join(&filename);
 
         // Download the media
@@ -172,6 +170,7 @@ impl TelegramClient {
     /// # Errors
     ///
     /// Returns an error if the file doesn't exist or the open command fails.
+    #[allow(clippy::unused_async)]
     pub async fn open_media_file(path: &Path) -> Result<(), TelegramError> {
         if !path.exists() {
             return Err(TelegramError::FileNotFound(path.to_path_buf()));
@@ -198,13 +197,12 @@ impl TelegramClient {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_photo_filename_format() {
-        let chat_id: i64 = 123456789;
+        let chat_id: i64 = 123_456_789;
         let message_id: i64 = 42;
-        let filename = format!("photo_{}_{}.jpg", chat_id, message_id);
+        let filename = format!("photo_{chat_id}_{message_id}.jpg");
         assert_eq!(filename, "photo_123456789_42.jpg");
     }
 }

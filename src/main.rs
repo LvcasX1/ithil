@@ -2,6 +2,8 @@
 //!
 //! This is the main entry point for the Ithil TUI client.
 
+#![allow(clippy::large_futures)]
+
 use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;

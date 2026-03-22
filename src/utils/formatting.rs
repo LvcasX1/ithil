@@ -100,7 +100,7 @@ pub fn word_wrap(text: &str, width: usize) -> String {
         if current_line.is_empty() {
             current_line = word.to_string();
         } else {
-            let test_line = format!("{} {}", current_line, word);
+            let test_line = format!("{current_line} {word}");
             if UnicodeWidthStr::width(test_line.as_str()) <= width {
                 current_line = test_line;
             } else {
@@ -163,7 +163,7 @@ fn format_float_size(value: f64, unit: &str) -> String {
     if (value - value.round()).abs() < 0.05 {
         format!("{} {}", value as i64, unit)
     } else {
-        format!("{:.1} {}", value, unit)
+        format!("{value:.1} {unit}")
     }
 }
 
@@ -227,8 +227,7 @@ mod tests {
         #[test]
         fn multiple_lines() {
             let result = word_wrap("The quick brown fox jumps over", 10);
-            let lines: Vec<&str> = result.lines().collect();
-            assert!(lines.len() >= 3);
+            assert!(result.lines().count() >= 3);
         }
 
         #[test]

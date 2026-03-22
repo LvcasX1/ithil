@@ -899,7 +899,7 @@ mod tests {
     #[test]
     fn test_settings_action_variants() {
         let close = SettingsAction::Close;
-        let save = SettingsAction::SaveAndClose(Box::new(Config::default()));
+        let save = SettingsAction::SaveAndClose(Box::default());
 
         assert!(matches!(close, SettingsAction::Close));
         assert!(matches!(save, SettingsAction::SaveAndClose(_)));

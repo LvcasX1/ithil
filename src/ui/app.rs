@@ -307,7 +307,7 @@ impl App {
 
     /// Returns the currently selected chat ID.
     #[must_use]
-    pub fn get_selected_chat_id(&self) -> Option<i64> {
+    pub const fn get_selected_chat_id(&self) -> Option<i64> {
         self.selected_chat_id
     }
 
@@ -1201,8 +1201,7 @@ impl App {
         let get_sender_name = |user_id: i64| -> String {
             cache
                 .get_user(user_id)
-                .map(|u| u.get_display_name())
-                .unwrap_or_else(|| format!("User {}", user_id))
+                .map_or_else(|| format!("User {user_id}"), |u| u.get_display_name())
         };
 
         let widget =
@@ -1545,7 +1544,7 @@ mod tests {
     #[test]
     fn test_debug_impl() {
         let app = create_test_app();
-        let debug = format!("{:?}", app);
+        let debug = format!("{app:?}");
         assert!(debug.contains("App"));
         assert!(debug.contains("state"));
     }

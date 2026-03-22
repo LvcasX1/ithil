@@ -150,7 +150,7 @@ impl TelegramClient {
     ///
     /// Returns an error if:
     /// - The client is not connected
-    /// - No password token is available (sign_in didn't request password)
+    /// - No password token is available (`sign_in` didn't request password)
     /// - The password is incorrect
     ///
     /// # Examples
@@ -215,6 +215,7 @@ impl TelegramClient {
     /// - The client is not connected
     /// - No login token is available
     /// - Sign up fails (API restrictions, etc.)
+    #[allow(clippy::unused_async)]
     pub async fn sign_up(&self, _first_name: &str, _last_name: &str) -> Result<(), TelegramError> {
         // Note: Sign up via third-party apps is not supported by Telegram anymore.
         // Users must sign up using an official Telegram app first.

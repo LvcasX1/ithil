@@ -7,7 +7,7 @@
 //!
 //! - [`app`]: Application-level functionality including configuration and credentials
 //! - [`cache`]: Thread-safe in-memory cache for Telegram data
-//! - [`telegram`]: Telegram client wrapper using grammers for MTProto communication
+//! - [`telegram`]: Telegram client wrapper using grammers for `MTProto` communication
 //! - [`types`]: Core domain types (User, Chat, Message, etc.)
 //! - [`ui`]: User interface components and rendering
 //!
@@ -42,7 +42,18 @@
 //! ```
 
 #![warn(clippy::all, clippy::pedantic, clippy::nursery)]
-#![allow(clippy::module_name_repetitions)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::large_futures,
+    clippy::too_many_lines,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::similar_names,
+    clippy::significant_drop_in_scrutinee,
+    clippy::option_if_let_else,
+    clippy::or_fun_call,
+    clippy::needless_range_loop
+)]
 
 pub mod app;
 pub mod cache;

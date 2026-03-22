@@ -162,12 +162,12 @@ impl From<grammers_client::InvocationError> for TelegramError {
             InvocationError::Io(io_err) => Self::Network(io_err.to_string()),
             InvocationError::Dropped => Self::Internal("Request was dropped".into()),
             InvocationError::Deserialize(err) => {
-                Self::Internal(format!("Deserialize error: {}", err))
+                Self::Internal(format!("Deserialize error: {err}"))
             },
-            InvocationError::Transport(err) => Self::Network(format!("Transport error: {}", err)),
+            InvocationError::Transport(err) => Self::Network(format!("Transport error: {err}")),
             InvocationError::InvalidDc => Self::Internal("Invalid datacenter".into()),
             InvocationError::Authentication(err) => {
-                Self::Internal(format!("Authentication error: {}", err))
+                Self::Internal(format!("Authentication error: {err}"))
             },
         }
     }

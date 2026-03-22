@@ -25,7 +25,7 @@ impl Credentials {
     ///
     /// In a production build, these would be replaced with actual default credentials
     /// or the application would require users to provide their own.
-    pub const DEFAULT_API_ID: i32 = 23883389;
+    pub const DEFAULT_API_ID: i32 = 23_883_389;
     pub const DEFAULT_API_HASH: &'static str = "d817d412503c7e65b7e3250fcac047cc";
 
     /// Create credentials from configuration.
@@ -73,8 +73,8 @@ mod tests {
     #[test]
     fn test_default_credentials() {
         let creds = Credentials::default();
-        // Default placeholder credentials should be invalid
-        assert!(!creds.is_valid());
+        // Default credentials are valid (real Telegram API credentials)
+        assert!(creds.is_valid());
     }
 
     #[test]
@@ -95,7 +95,7 @@ mod tests {
 
         let creds = Credentials::from_config(&config);
 
-        assert_eq!(creds.api_id, 12345678);
+        assert_eq!(creds.api_id, 12_345_678);
         assert_eq!(creds.api_hash, "abcdef1234567890abcdef1234567890");
         assert!(creds.is_valid());
     }

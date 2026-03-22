@@ -160,7 +160,8 @@ impl<'a> MessageWidget<'a> {
                 // Add dimensions if we have media info
                 if let Some(ref media) = self.message.content.media {
                     if media.width > 0 && media.height > 0 {
-                        photo_text.push_str(&format!(" {}×{}", media.width, media.height));
+                        use std::fmt::Write;
+                        let _ = write!(photo_text, " {}×{}", media.width, media.height);
                     }
                 }
 

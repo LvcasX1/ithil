@@ -49,7 +49,7 @@ impl TelegramClient {
 
         while let Some(dialog) = dialogs.next().await.map_err(TelegramError::from)? {
             // Cache the peer as a user if it's a private chat
-            if let Some(user) = grammers_peer_to_user(&dialog.peer()) {
+            if let Some(user) = grammers_peer_to_user(dialog.peer()) {
                 self.cache().set_user(user);
             }
 
@@ -210,7 +210,7 @@ impl TelegramClient {
         );
 
         // Folder ID 1 is the Archive folder
-        let folder_id = if archive { 1 } else { 0 };
+        let folder_id = i32::from(archive);
 
         client
             .invoke(&tl::functions::folders::EditPeerFolders {
@@ -300,7 +300,7 @@ fn dialog_to_chat(dialog: &Dialog) -> Chat {
 
     Chat {
         id: peer.id().bare_id(),
-        chat_type: grammers_peer_type(&peer),
+        chat_type: grammers_peer_type(peer),
         title: peer.name().unwrap_or("").to_string(),
         username: peer.username().map(ToString::to_string).unwrap_or_default(),
         photo_id: String::new(), // Photo handling requires additional work
@@ -341,7 +341,7 @@ fn extract_dialog_info(raw: &tl::enums::Dialog) -> (i32, bool, String) {
     }
 }
 
-/// Maps grammers Peer to our ChatType.
+/// Maps grammers Peer to our `ChatType`.
 fn grammers_peer_type(peer: &GrammersPeer) -> ChatType {
     use grammers_session::types::ChannelKind;
 
@@ -349,7 +349,7 @@ fn grammers_peer_type(peer: &GrammersPeer) -> ChatType {
         GrammersPeer::User(_) => ChatType::Private,
         GrammersPeer::Group(_) => ChatType::Group,
         GrammersPeer::Channel(c) => match c.kind() {
-            Some(ChannelKind::Megagroup) | Some(ChannelKind::Gigagroup) => ChatType::Supergroup,
+            Some(ChannelKind::Megagroup | ChannelKind::Gigagroup) => ChatType::Supergroup,
             Some(ChannelKind::Broadcast) | None => ChatType::Channel,
         },
     }
@@ -406,17 +406,18 @@ pub(crate) fn grammers_message_to_message(msg: &grammers_client::message::Messag
                 let (width, height) = photo_sizes
                     .iter()
                     .max_by_key(|s| s.width * s.height)
-                    .map(|s| (s.width, s.height))
-                    .unwrap_or((0, 0));
+                    .map_or((0, 0), |s| (s.width, s.height));
 
                 // Calculate total size from largest photo
-                let size = photo.size().map(|s| s as i64).unwrap_or_else(|| {
-                    photo_sizes
-                        .iter()
-                        .max_by_key(|s| s.size)
-                        .map(|s| i64::from(s.size))
-                        .unwrap_or(0)
-                });
+                let size = photo.size().map_or_else(
+                    || {
+                        photo_sizes
+                            .iter()
+                            .max_by_key(|s| s.size)
+                            .map_or(0, |s| i64::from(s.size))
+                    },
+                    |s| s as i64,
+                );
 
                 let media = Media {
                     id: photo.id().to_string(),
@@ -470,13 +471,7 @@ pub(crate) fn grammers_message_to_message(msg: &grammers_client::message::Messag
                 String::new(),
                 None,
             ),
-            grammers_client::media::Media::Geo(_) => (
-                MessageType::Location,
-                msg.text().to_string(),
-                String::new(),
-                None,
-            ),
-            grammers_client::media::Media::GeoLive(_) => (
+            grammers_client::media::Media::Geo(_) | grammers_client::media::Media::GeoLive(_) => (
                 MessageType::Location,
                 msg.text().to_string(),
                 String::new(),
@@ -541,7 +536,7 @@ pub(crate) fn grammers_message_to_message(msg: &grammers_client::message::Messag
         is_pinned: msg.pinned(),
         is_edited: edit_date.is_some(),
         is_forwarded: msg.forward_header().is_some(),
-        reply_to_message_id: msg.reply_to_message_id().map(i64::from).unwrap_or(0),
+        reply_to_message_id: msg.reply_to_message_id().map_or(0, i64::from),
         forward_info: None, // Would need to convert forward info
         views: msg.view_count().unwrap_or(0),
         media_album_id: msg.grouped_id().unwrap_or(0),

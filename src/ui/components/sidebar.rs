@@ -402,7 +402,7 @@ mod tests {
         let chat = create_test_chat(1, "Test User", ChatType::Private);
         let user = create_test_user(1, "Test");
 
-        model.set_chat(chat.clone(), Some(user.clone()));
+        model.set_chat(chat, Some(user));
 
         assert!(model.has_chat());
         assert_eq!(model.chat.as_ref().unwrap().title, "Test User");

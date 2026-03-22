@@ -388,7 +388,7 @@ impl<'a> ChatItemComponent<'a> {
 
     /// Returns the height in lines this item will occupy.
     #[must_use]
-    pub fn height(&self) -> u16 {
+    pub const fn height(&self) -> u16 {
         ChatItemBuilder::new(self.chat, self.config.width)
             .show_preview(self.config.show_preview)
             .height()

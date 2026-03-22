@@ -936,7 +936,7 @@ mod tests {
                 bytes_loaded: 100,
                 ..Default::default()
             };
-            assert_eq!(progress.get_percentage(), 0.0);
+            assert!((progress.get_percentage() - 0.0).abs() < f64::EPSILON);
         }
 
         #[test]

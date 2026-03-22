@@ -139,3 +139,190 @@ jobs:
       - name: Publish to crates.io
         run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
         continue-on-error: true  # Don't fail release if crates.io publish fails
+
+  publish-homebrew:
+    name: Publish to Homebrew
+    needs: build-and-upload
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref, '-') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "v${{ steps.version.outputs.VERSION }}" \
+            --pattern "ithil-darwin-x86_64.tar.gz.sha256" \
+            --pattern "ithil-darwin-aarch64.tar.gz.sha256" \
+            --pattern "ithil-linux-x86_64.tar.gz.sha256" \
+            --pattern "ithil-linux-aarch64.tar.gz.sha256"
+
+      - name: Extract checksums
+        id: checksums
+        run: |
+          echo "SHA256_DARWIN_X86_64=$(awk '{print $1}' ithil-darwin-x86_64.tar.gz.sha256)" >> "$GITHUB_OUTPUT"
+          echo "SHA256_DARWIN_ARM64=$(awk '{print $1}' ithil-darwin-aarch64.tar.gz.sha256)" >> "$GITHUB_OUTPUT"
+          echo "SHA256_LINUX_X86_64=$(awk '{print $1}' ithil-linux-x86_64.tar.gz.sha256)" >> "$GITHUB_OUTPUT"
+          echo "SHA256_LINUX_ARM64=$(awk '{print $1}' ithil-linux-aarch64.tar.gz.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Homebrew formula
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          SHA256_DARWIN_X86_64="${{ steps.checksums.outputs.SHA256_DARWIN_X86_64 }}"
+          SHA256_DARWIN_ARM64="${{ steps.checksums.outputs.SHA256_DARWIN_ARM64 }}"
+          SHA256_LINUX_X86_64="${{ steps.checksums.outputs.SHA256_LINUX_X86_64 }}"
+          SHA256_LINUX_ARM64="${{ steps.checksums.outputs.SHA256_LINUX_ARM64 }}"
+
+          cat > ithil.rb << FORMULA
+          class Ithil < Formula
+            desc "A Terminal User Interface for Telegram"
+            homepage "https://github.com/lvcasx1/ithil"
+            license "MIT"
+            version "${VERSION}"
+
+            on_macos do
+              if Hardware::CPU.intel?
+                url "https://github.com/lvcasx1/ithil/releases/download/v${VERSION}/ithil-darwin-x86_64.tar.gz"
+                sha256 "${SHA256_DARWIN_X86_64}"
+              else
+                url "https://github.com/lvcasx1/ithil/releases/download/v${VERSION}/ithil-darwin-aarch64.tar.gz"
+                sha256 "${SHA256_DARWIN_ARM64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.intel?
+                url "https://github.com/lvcasx1/ithil/releases/download/v${VERSION}/ithil-linux-x86_64.tar.gz"
+                sha256 "${SHA256_LINUX_X86_64}"
+              else
+                url "https://github.com/lvcasx1/ithil/releases/download/v${VERSION}/ithil-linux-aarch64.tar.gz"
+                sha256 "${SHA256_LINUX_ARM64}"
+              end
+            end
+
+            def install
+              bin.install "ithil"
+            end
+
+            test do
+              assert_match "ithil", shell_output("#{bin}/ithil --version")
+            end
+          end
+          FORMULA
+
+      - name: Push formula to Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/lvcasx1/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp ithil.rb tap/Formula/ithil.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/ithil.rb
+          git diff --cached --quiet || git commit -m "Update ithil to ${{ steps.version.outputs.VERSION }}"
+          git push
+
+  publish-aur:
+    name: Publish to AUR
+    needs: build-and-upload
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref, '-') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download Linux x86_64 checksum
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "v${{ steps.version.outputs.VERSION }}" \
+            --pattern "ithil-linux-x86_64.tar.gz.sha256"
+
+      - name: Extract checksum
+        id: checksum
+        run: |
+          echo "SHA256=$(awk '{print $1}' ithil-linux-x86_64.tar.gz.sha256)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate PKGBUILD
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          SHA256="${{ steps.checksum.outputs.SHA256 }}"
+
+          cat > PKGBUILD << 'PKGEOF'
+          # Maintainer: LvcasX1 <ilucas.gp7@gmail.com>
+          pkgname=ithil-bin
+          pkgver=VERSION_PLACEHOLDER
+          pkgrel=1
+          pkgdesc="A Terminal User Interface for Telegram"
+          arch=('x86_64')
+          url="https://github.com/lvcasx1/ithil"
+          license=('MIT')
+          provides=('ithil')
+          conflicts=('ithil')
+          source=("https://github.com/lvcasx1/ithil/releases/download/v${pkgver}/ithil-linux-x86_64.tar.gz")
+          sha256sums=('SHA256_PLACEHOLDER')
+
+          package() {
+            install -Dm755 "${srcdir}/ithil" "${pkgdir}/usr/bin/ithil"
+          }
+          PKGEOF
+
+          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/" PKGBUILD
+          sed -i "s/SHA256_PLACEHOLDER/${SHA256}/" PKGBUILD
+
+      - name: Generate .SRCINFO
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          SHA256="${{ steps.checksum.outputs.SHA256 }}"
+
+          cat > .SRCINFO << SRCEOF
+          pkgbase = ithil-bin
+          	pkgdesc = A Terminal User Interface for Telegram
+          	pkgver = ${VERSION}
+          	pkgrel = 1
+          	url = https://github.com/lvcasx1/ithil
+          	arch = x86_64
+          	license = MIT
+          	provides = ithil
+          	conflicts = ithil
+          	source = https://github.com/lvcasx1/ithil/releases/download/v${VERSION}/ithil-linux-x86_64.tar.gz
+          	sha256sums = ${SHA256}
+
+          pkgname = ithil-bin
+          SRCEOF
+
+      - name: Setup SSH for AUR
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config << EOF
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            User aur
+          EOF
+
+      - name: Push to AUR
+        run: |
+          git clone ssh://aur@aur.archlinux.org/ithil-bin.git aur-repo
+          cp PKGBUILD aur-repo/PKGBUILD
+          cp .SRCINFO aur-repo/.SRCINFO
+          cd aur-repo
+          git config user.name "LvcasX1"
+          git config user.email "ilucas.gp7@gmail.com"
+          git add PKGBUILD .SRCINFO
+          git diff --cached --quiet || git commit -m "Update to ${{ steps.version.outputs.VERSION }}"
+          git push

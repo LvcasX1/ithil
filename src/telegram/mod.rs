@@ -1,4 +1,4 @@
-//! Telegram client module providing MTProto communication via grammers.
+//! Telegram client module providing `MTProto` communication via grammers.
 //!
 //! This module wraps the grammers library to provide a high-level interface
 //! for Telegram operations including authentication, chat management,

@@ -59,7 +59,7 @@ pub struct TelegramClient {
     /// Flag indicating if the update loop is running
     update_loop_running: Arc<AtomicBool>,
 
-    /// Login token stored between request_login_code and sign_in
+    /// Login token stored between `request_login_code` and `sign_in`
     login_token: Arc<RwLock<Option<LoginToken>>>,
 
     /// Password token stored for 2FA authentication
@@ -290,7 +290,7 @@ impl TelegramClient {
 
     /// Gets the shared cache.
     #[must_use]
-    pub fn cache(&self) -> &SharedCache {
+    pub const fn cache(&self) -> &SharedCache {
         &self.cache
     }
 
@@ -305,6 +305,7 @@ impl TelegramClient {
     }
 
     /// Returns `true` if the update loop is currently running.
+    #[must_use]
     pub fn is_update_loop_running(&self) -> bool {
         self.update_loop_running.load(Ordering::SeqCst)
     }
@@ -318,7 +319,7 @@ impl TelegramClient {
         }
     }
 
-    /// Internal: Stores the login token for sign_in.
+    /// Internal: Stores the login token for `sign_in`.
     pub(crate) async fn set_login_token(&self, token: LoginToken) {
         *self.login_token.write().await = Some(token);
     }
@@ -450,7 +451,7 @@ mod tests {
             cache,
         );
 
-        let debug_str = format!("{:?}", client);
+        let debug_str = format!("{client:?}");
         assert!(debug_str.contains("TelegramClient"));
         assert!(debug_str.contains("12345"));
         assert!(debug_str.contains("test.session"));

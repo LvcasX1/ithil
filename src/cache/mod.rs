@@ -439,7 +439,7 @@ mod tests {
             let cache = Cache::new(100);
             let user = create_test_user(1, "Alice");
 
-            cache.set_user(user.clone());
+            cache.set_user(user);
 
             let retrieved = cache.get_user(1);
             assert!(retrieved.is_some());

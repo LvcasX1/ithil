@@ -79,7 +79,7 @@ impl TelegramClient {
         while let Some(msg) = iter.next().await.map_err(TelegramError::from)? {
             // Cache the sender as a user if available
             if let Some(sender_peer) = msg.sender() {
-                if let Some(user) = grammers_peer_to_user(&sender_peer) {
+                if let Some(user) = grammers_peer_to_user(sender_peer) {
                     self.cache().set_user(user);
                 }
             }
