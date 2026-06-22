@@ -875,8 +875,8 @@ Then add the helper method:
                         self.conversation_model.input.set_focused(true);
                         self.focused_pane = FocusedPane::Input;
                     },
-                    // `activate()` never returns Cancelled.
-                    FilePickerAction::Cancelled | FilePickerAction::None => {},
+                    // `activate()` only descends a dir (None) or selects a file.
+                    FilePickerAction::None => {},
                 }
             },
             _ => {},
