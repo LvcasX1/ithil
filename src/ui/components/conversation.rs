@@ -304,6 +304,7 @@ impl ConversationModel {
             return None;
         }
 
+        // attachment takes precedence over an in-progress edit
         let action = if let Some(path) = self.pending_attachment.take() {
             ConversationAction::SendMessageWithAttachment(text, path, self.reply_to)
         } else if let Some(edit_id) = self.editing {

@@ -891,7 +891,12 @@ impl App {
                         return None;
                     },
                     Action::CancelAction => {
-                        // Unfocus input and return to conversation
+                        // First Esc clears a staged attachment (and keeps focus);
+                        // only once nothing is staged does Esc unfocus the input.
+                        if self.conversation_model.pending_attachment().is_some() {
+                            let _ = self.conversation_model.handle_action(Action::CancelAction);
+                            return None;
+                        }
                         self.conversation_model.input.set_focused(false);
                         self.conversation_model.clear_action_state();
                         self.focused_pane = FocusedPane::Conversation;
@@ -1746,5 +1751,45 @@ mod tests {
         let debug = format!("{app:?}");
         assert!(debug.contains("App"));
         assert!(debug.contains("state"));
+    }
+
+    #[test]
+    fn test_esc_clears_staged_attachment_keeps_input_focus() {
+        let mut app = create_test_app();
+        app.state = AppState::Main;
+        app.focused_pane = FocusedPane::Input;
+        app.conversation_model.input.set_focused(true);
+
+        // Stage an attachment
+        app.conversation_model
+            .set_pending_attachment(std::path::PathBuf::from("/tmp/x.png"));
+        assert!(app.conversation_model.pending_attachment().is_some());
+
+        // Send Esc while a file is staged
+        let esc_key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key(esc_key);
+
+        // Attachment must be cleared
+        assert!(
+            app.conversation_model.pending_attachment().is_none(),
+            "first Esc should clear the staged attachment"
+        );
+        // Focus must remain on Input — NOT jump to Conversation
+        assert_eq!(
+            app.focused_pane,
+            FocusedPane::Input,
+            "first Esc must keep focus on the Input pane"
+        );
+
+        // A second Esc with no attachment should then unfocus the input
+        app.handle_key(esc_key);
+        assert_eq!(
+            app.focused_pane,
+            FocusedPane::Conversation,
+            "second Esc (no attachment) should move focus to Conversation"
+        );
     }
 }
