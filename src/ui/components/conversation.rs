@@ -159,6 +159,14 @@ impl ConversationModel {
     ///
     /// If the user was viewing the latest message, auto-scrolls to the new one.
     pub fn add_message(&mut self, message: Message) {
+        // De-duplicate by id: a sent message arrives twice — once as our local
+        // echo and once when Telegram's update stream re-delivers it. Replace the
+        // existing entry instead of appending a second copy.
+        if let Some(idx) = self.messages.iter().position(|m| m.id == message.id) {
+            self.messages[idx] = message;
+            return;
+        }
+
         let was_at_bottom = self.selected_index == self.messages.len().saturating_sub(1);
         self.messages.push(message);
 
@@ -486,12 +494,19 @@ where
     F: Fn(i64) -> String,
 {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Split into messages area and input area
+        // Split into messages area and input area. A staged attachment adds a
+        // banner row above the input, so the input region needs one extra line
+        // to keep the bordered text box from collapsing to zero interior rows.
+        let input_height = if self.model.pending_attachment.is_some() {
+            4
+        } else {
+            3
+        };
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),    // Messages
-                Constraint::Length(3), // Input
+                Constraint::Min(3),               // Messages
+                Constraint::Length(input_height), // Input (+ banner)
             ])
             .split(area);
 
@@ -990,6 +1005,16 @@ mod tests {
 
         // visible_height should be 30 - 5 = 25 (accounting for borders/input)
         assert_eq!(model.visible_height, 25);
+    }
+
+    #[test]
+    fn add_message_dedupes_by_id() {
+        let mut model = ConversationModel::new();
+        model.add_message(create_test_message(7, "first", true));
+        // Same id arrives again (local echo + server update) with updated text.
+        model.add_message(create_test_message(7, "updated", true));
+        assert_eq!(model.message_count(), 1, "must not duplicate by id");
+        assert_eq!(model.messages[0].content.text, "updated");
     }
 
     #[test]

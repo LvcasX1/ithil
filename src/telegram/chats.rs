@@ -457,7 +457,9 @@ pub(crate) fn grammers_message_to_message(msg: &grammers_client::message::Messag
                 } else {
                     MessageType::Document
                 };
-                (content_type, msg.text().to_string(), String::new(), None)
+                // A media message's text IS its caption — store it in the caption
+                // slot, consistent with the Photo branch above, so the UI shows it.
+                (content_type, String::new(), msg.text().to_string(), None)
             },
             grammers_client::media::Media::Sticker(_) => (
                 MessageType::Sticker,

@@ -303,6 +303,10 @@ impl<'a> ChatItemBuilder<'a> {
                         preview.push_str(&doc.file_name);
                     }
                 }
+                if !msg.content.caption.is_empty() {
+                    preview.push_str(": ");
+                    preview.push_str(&msg.content.caption);
+                }
             },
             MessageType::Sticker => preview.push_str("🎨 Sticker"),
             MessageType::Animation => preview.push_str("GIF"),
