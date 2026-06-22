@@ -546,6 +546,10 @@ impl App {
                 // Forward not yet implemented
                 None
             },
+            ConversationAction::SendMessageWithAttachment(_caption, _path, _reply_to) => {
+                // Wired up in Task 5
+                None
+            },
         }
     }
 
