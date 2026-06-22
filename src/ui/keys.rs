@@ -115,6 +115,8 @@ pub enum Action {
     CancelAction,
     /// Open/view media (photo, video, document)
     OpenMedia,
+    /// Open the file picker to attach a file to the message
+    AttachFile,
 
     // =========================================================================
     // Input Actions
@@ -174,6 +176,7 @@ impl std::fmt::Display for Action {
             Self::Forward => write!(f, "Forward"),
             Self::CancelAction => write!(f, "Cancel"),
             Self::OpenMedia => write!(f, "Open Media"),
+            Self::AttachFile => write!(f, "Attach File"),
             Self::Backspace => write!(f, "Backspace"),
             Self::DeleteChar => write!(f, "Delete Char"),
             Self::ScrollUp => write!(f, "Scroll Up"),
@@ -230,6 +233,7 @@ impl KeyMap {
         bindings.insert(key(KeyCode::Char('2'), ctrl()), Action::FocusConversation);
         bindings.insert(key(KeyCode::Char('3'), ctrl()), Action::FocusSidebar);
         bindings.insert(key(KeyCode::Char('s'), ctrl()), Action::ToggleSidebar);
+        bindings.insert(key(KeyCode::Char('t'), ctrl()), Action::AttachFile);
         bindings.insert(key(KeyCode::Char(','), ctrl()), Action::OpenSettings);
         bindings.insert(key(KeyCode::Char('p'), ctrl()), Action::OpenSettings);
         bindings.insert(key(KeyCode::F(12), none()), Action::OpenSettings);
@@ -376,6 +380,7 @@ impl KeyMap {
                 ("x", "Delete"),
                 ("f", "Forward"),
                 ("o", "Open media"),
+                ("Ctrl+T", "Attach file"),
                 ("p", "Pin/unpin"),
                 ("m", "Mute/unmute"),
                 ("Tab", "Next pane"),
@@ -397,6 +402,7 @@ impl KeyMap {
                 ("Ctrl+R", "Reply"),
                 ("Ctrl+E", "Edit"),
                 ("Ctrl+O", "Open media"),
+                ("Ctrl+T", "Attach file"),
                 ("F2", "Pin/unpin"),
                 ("F3", "Mute/unmute"),
                 ("F5", "Mark as read"),

@@ -17,6 +17,18 @@ use super::client::TelegramClient;
 use super::error::TelegramError;
 use crate::types::Message;
 
+/// Returns `true` when the file extension indicates an image that Telegram
+/// should receive as a compressed photo. Everything else is sent as a document.
+fn is_image(path: &std::path::Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("jpg" | "jpeg" | "png" | "webp" | "bmp")
+    )
+}
+
 impl TelegramClient {
     /// Gets message history for a chat.
     ///
@@ -157,6 +169,61 @@ impl TelegramClient {
         self.cache().add_message(chat_id, message.clone());
 
         debug!("Sent message {} to chat {}", message.id, chat_id);
+        Ok(message)
+    }
+
+    /// Sends a file (photo or document) with an optional caption to a chat.
+    ///
+    /// Images (by extension) are sent as compressed photos; every other file
+    /// type is sent as a document. The `text` becomes the media caption.
+    ///
+    /// # Arguments
+    ///
+    /// * `chat_id` - ID of the chat to send to
+    /// * `text` - Caption (may be empty)
+    /// * `path` - Path to the local file to upload
+    /// * `reply_to` - Optional message ID to reply to
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the client is not authorized, the chat is not found,
+    /// the file cannot be read/uploaded, or sending fails.
+    pub async fn send_file(
+        &self,
+        chat_id: i64,
+        text: &str,
+        path: &std::path::Path,
+        reply_to: Option<i64>,
+    ) -> Result<Message, TelegramError> {
+        let client = self.require_authorized().await?;
+        let peer_ref = self.get_peer_ref(chat_id).await?;
+
+        info!("Uploading file to chat {}: {}", chat_id, path.display());
+
+        let uploaded = client.upload_file(path).await?;
+
+        let mut input_message = InputMessage::new().text(text);
+        input_message = if is_image(path) {
+            input_message.photo(uploaded)
+        } else {
+            input_message.document(uploaded)
+        };
+
+        if let Some(reply_id) = reply_to {
+            #[allow(clippy::cast_possible_truncation)]
+            let reply_id_i32 = reply_id as i32;
+            input_message = input_message.reply_to(Some(reply_id_i32));
+        }
+
+        let sent = client
+            .send_message(peer_ref, input_message)
+            .await
+            .map_err(TelegramError::from)?;
+
+        let message = grammers_message_to_message(&sent);
+        self.cache().add_message(chat_id, message.clone());
+
+        debug!("Sent file message {} to chat {}", message.id, chat_id);
         Ok(message)
     }
 
@@ -437,5 +504,29 @@ mod tests {
         assert_eq!(format!("{}", MessageType::Text), "Text");
         assert_eq!(format!("{}", MessageType::Photo), "Photo");
         assert_eq!(format!("{}", MessageType::Video), "Video");
+    }
+
+    use super::is_image;
+    use std::path::Path;
+
+    #[test]
+    fn images_classify_as_photo() {
+        for p in ["a.jpg", "a.jpeg", "a.PNG", "dir/sub/photo.WebP", "x.bmp"] {
+            assert!(is_image(Path::new(p)), "{p} should be an image");
+        }
+    }
+
+    #[test]
+    fn non_images_classify_as_document() {
+        for p in [
+            "a.gif",
+            "clip.mp4",
+            "notes.txt",
+            "report.pdf",
+            "noext",
+            "a.tar.gz",
+        ] {
+            assert!(!is_image(Path::new(p)), "{p} should NOT be an image");
+        }
     }
 }

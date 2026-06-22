@@ -31,7 +31,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Widget},
 };
 
@@ -76,6 +76,8 @@ pub struct ConversationModel {
     pub editing: Option<i64>,
     /// Current input mode
     pub input_mode: InputMode,
+    /// Path of a file staged to send with the next message, if any.
+    pub pending_attachment: Option<std::path::PathBuf>,
     /// Visible height of the message area (in lines)
     visible_height: usize,
 }
@@ -111,6 +113,7 @@ impl ConversationModel {
             reply_to: None,
             editing: None,
             input_mode: InputMode::Normal,
+            pending_attachment: None,
             visible_height: 20,
         }
     }
@@ -156,6 +159,14 @@ impl ConversationModel {
     ///
     /// If the user was viewing the latest message, auto-scrolls to the new one.
     pub fn add_message(&mut self, message: Message) {
+        // De-duplicate by id: a sent message arrives twice — once as our local
+        // echo and once when Telegram's update stream re-delivers it. Replace the
+        // existing entry instead of appending a second copy.
+        if let Some(idx) = self.messages.iter().position(|m| m.id == message.id) {
+            self.messages[idx] = message;
+            return;
+        }
+
         let was_at_bottom = self.selected_index == self.messages.len().saturating_sub(1);
         self.messages.push(message);
 
@@ -276,6 +287,9 @@ impl ConversationModel {
         match action {
             Action::SendMessage => self.submit_input(),
             Action::CancelAction => {
+                if self.pending_attachment.take().is_some() {
+                    return None;
+                }
                 self.input.set_focused(false);
                 self.clear_action_state();
                 None
@@ -291,11 +305,17 @@ impl ConversationModel {
     /// Submits the current input.
     fn submit_input(&mut self) -> Option<ConversationAction> {
         let text = self.input.value().trim().to_string();
-        if text.is_empty() {
+
+        // With an attachment, an empty caption is allowed. Without one, keep the
+        // existing guard that drops empty submissions.
+        if text.is_empty() && self.pending_attachment.is_none() {
             return None;
         }
 
-        let action = if let Some(edit_id) = self.editing {
+        // attachment takes precedence over an in-progress edit
+        let action = if let Some(path) = self.pending_attachment.take() {
+            ConversationAction::SendMessageWithAttachment(text, path, self.reply_to)
+        } else if let Some(edit_id) = self.editing {
             ConversationAction::EditMessage(edit_id, text)
         } else {
             ConversationAction::SendMessage(text, self.reply_to)
@@ -304,6 +324,17 @@ impl ConversationModel {
         self.input.clear();
         self.clear_action_state();
         Some(action)
+    }
+
+    /// Stages a file to be sent with the next message.
+    pub fn set_pending_attachment(&mut self, path: std::path::PathBuf) {
+        self.pending_attachment = Some(path);
+    }
+
+    /// Returns the staged attachment path, if any.
+    #[must_use]
+    pub const fn pending_attachment(&self) -> Option<&std::path::PathBuf> {
+        self.pending_attachment.as_ref()
     }
 
     /// Clears the reply/edit state.
@@ -405,6 +436,8 @@ impl ConversationModel {
 pub enum ConversationAction {
     /// Send a new message (text, optional `reply_to` message ID)
     SendMessage(String, Option<i64>),
+    /// Send a message with a file attachment (caption, file path, optional `reply_to`)
+    SendMessageWithAttachment(String, std::path::PathBuf, Option<i64>),
     /// Edit an existing message (`message_id`, `new_text`)
     EditMessage(i64, String),
     /// Delete a message
@@ -461,12 +494,19 @@ where
     F: Fn(i64) -> String,
 {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // Split into messages area and input area
+        // Split into messages area and input area. A staged attachment adds a
+        // banner row above the input, so the input region needs one extra line
+        // to keep the bordered text box from collapsing to zero interior rows.
+        let input_height = if self.model.pending_attachment.is_some() {
+            4
+        } else {
+            3
+        };
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3),    // Messages
-                Constraint::Length(3), // Input
+                Constraint::Min(3),               // Messages
+                Constraint::Length(input_height), // Input (+ banner)
             ])
             .split(area);
 
@@ -615,6 +655,26 @@ where
 
     /// Renders the input area.
     fn render_input(&self, area: Rect, buf: &mut Buffer) {
+        // Reserve a banner line for a staged attachment.
+        let area = if let Some(path) = self.model.pending_attachment.as_ref() {
+            let rows = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(1), Constraint::Min(2)])
+                .split(area);
+            let name = path.file_name().map_or_else(
+                || path.display().to_string(),
+                |n| n.to_string_lossy().into_owned(),
+            );
+            let banner = Paragraph::new(Line::from(vec![
+                Span::styled(format!("📎 {name}"), Styles::text_accent()),
+                Span::styled("  Esc to remove", Styles::text_muted()),
+            ]));
+            banner.render(rows[0], buf);
+            rows[1]
+        } else {
+            area
+        };
+
         let input_border_style = if self.model.input.is_focused() {
             Styles::border_focused()
         } else {
@@ -945,6 +1005,72 @@ mod tests {
 
         // visible_height should be 30 - 5 = 25 (accounting for borders/input)
         assert_eq!(model.visible_height, 25);
+    }
+
+    #[test]
+    fn add_message_dedupes_by_id() {
+        let mut model = ConversationModel::new();
+        model.add_message(create_test_message(7, "first", true));
+        // Same id arrives again (local echo + server update) with updated text.
+        model.add_message(create_test_message(7, "updated", true));
+        assert_eq!(model.message_count(), 1, "must not duplicate by id");
+        assert_eq!(model.messages[0].content.text, "updated");
+    }
+
+    #[test]
+    fn submit_with_attachment_emits_attachment_action() {
+        use std::path::PathBuf;
+        let mut model = ConversationModel::new();
+        model.input.set_focused(true);
+        model.set_pending_attachment(PathBuf::from("/tmp/cat.png"));
+        model.input.set_value("look");
+        let action = model.handle_action(Action::SendMessage);
+        assert_eq!(
+            action,
+            Some(ConversationAction::SendMessageWithAttachment(
+                "look".to_string(),
+                PathBuf::from("/tmp/cat.png"),
+                None
+            ))
+        );
+        assert!(model.pending_attachment().is_none(), "cleared after send");
+    }
+
+    #[test]
+    fn submit_attachment_with_empty_caption_still_sends() {
+        use std::path::PathBuf;
+        let mut model = ConversationModel::new();
+        model.input.set_focused(true);
+        model.set_pending_attachment(PathBuf::from("/tmp/cat.png"));
+        let action = model.handle_action(Action::SendMessage);
+        assert!(matches!(
+            action,
+            Some(ConversationAction::SendMessageWithAttachment(_, _, _))
+        ));
+    }
+
+    #[test]
+    fn submit_without_attachment_emits_plain_send() {
+        let mut model = ConversationModel::new();
+        model.input.set_focused(true);
+        model.input.set_value("hi");
+        let action = model.handle_action(Action::SendMessage);
+        assert_eq!(
+            action,
+            Some(ConversationAction::SendMessage("hi".to_string(), None))
+        );
+    }
+
+    #[test]
+    fn esc_clears_pending_attachment_first() {
+        use std::path::PathBuf;
+        let mut model = ConversationModel::new();
+        model.input.set_focused(true);
+        model.reply_to = Some(5);
+        model.set_pending_attachment(PathBuf::from("/tmp/cat.png"));
+        model.handle_action(Action::CancelAction);
+        assert!(model.pending_attachment().is_none());
+        assert_eq!(model.reply_to, Some(5), "reply preserved on first Esc");
     }
 
     #[test]

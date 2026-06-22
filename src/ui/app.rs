@@ -126,6 +126,8 @@ pub enum AppAction {
     ChatSelected(i64),
     /// Send a message to the current chat
     SendMessage(i64, String, Option<i64>),
+    /// Send a message with a file attachment (`chat_id`, caption, file path, optional `reply_to`)
+    SendMessageWithAttachment(i64, String, std::path::PathBuf, Option<i64>),
     /// Edit an existing message
     EditMessage(i64, i64, String),
     /// Delete a message
@@ -192,6 +194,9 @@ pub struct App {
 
     /// Status bar model
     status_bar: StatusBar,
+
+    /// Active file picker overlay, when attaching a file.
+    file_picker: Option<crate::ui::components::FilePicker>,
 }
 
 impl App {
@@ -252,6 +257,7 @@ impl App {
             selected_chat_id: None,
             status_message: None,
             status_bar,
+            file_picker: None,
         }
     }
 
@@ -514,6 +520,10 @@ impl App {
             AppAction::SendMessage(chat_id, text, reply_to) => {
                 self.handle_send_message(chat_id, text, reply_to).await;
             },
+            AppAction::SendMessageWithAttachment(chat_id, text, path, reply_to) => {
+                self.handle_send_message_with_attachment(chat_id, text, path, reply_to)
+                    .await;
+            },
             AppAction::EditMessage(chat_id, message_id, text) => {
                 self.handle_edit_message(chat_id, message_id, text).await;
             },
@@ -546,6 +556,9 @@ impl App {
                 // Forward not yet implemented
                 None
             },
+            ConversationAction::SendMessageWithAttachment(text, path, reply_to) => Some(
+                AppAction::SendMessageWithAttachment(chat_id, text, path, reply_to),
+            ),
         }
     }
 
@@ -558,6 +571,30 @@ impl App {
             },
             Err(e) => {
                 self.set_status_message(format!("Failed to send message: {e}"));
+            },
+        }
+    }
+
+    /// Handle sending a message with a file attachment.
+    async fn handle_send_message_with_attachment(
+        &mut self,
+        chat_id: i64,
+        text: String,
+        path: std::path::PathBuf,
+        reply_to: Option<i64>,
+    ) {
+        self.set_status_message("Uploading\u{2026}".to_string());
+        match self
+            .telegram
+            .send_file(chat_id, &text, &path, reply_to)
+            .await
+        {
+            Ok(message) => {
+                self.conversation_model.add_message(message);
+                self.clear_status_message();
+            },
+            Err(e) => {
+                self.set_status_message(format!("Failed to send file: {e}"));
             },
         }
     }
@@ -746,6 +783,11 @@ impl App {
     /// Returns an optional [`AppAction`] if the key triggered an action
     /// that needs external handling.
     pub fn handle_key(&mut self, key: KeyEvent) -> Option<AppAction> {
+        // File picker overlay captures all keys while open.
+        if self.file_picker.is_some() {
+            return self.handle_file_picker_key(key);
+        }
+
         // Handle auth state separately - forward all keys to AuthModel
         if self.state == AppState::Auth {
             if let Some(auth_action) = self.auth_model.handle_input(key) {
@@ -822,6 +864,10 @@ impl App {
                         }
                         return None;
                     },
+                    Action::AttachFile => {
+                        self.file_picker = Some(crate::ui::components::FilePicker::new());
+                        return None;
+                    },
                     // Global actions should be handled by handle_action
                     _ => return self.handle_action(action),
                 }
@@ -845,7 +891,12 @@ impl App {
                         return None;
                     },
                     Action::CancelAction => {
-                        // Unfocus input and return to conversation
+                        // First Esc clears a staged attachment (and keeps focus);
+                        // only once nothing is staged does Esc unfocus the input.
+                        if self.conversation_model.pending_attachment().is_some() {
+                            let _ = self.conversation_model.handle_action(Action::CancelAction);
+                            return None;
+                        }
                         self.conversation_model.input.set_focused(false);
                         self.conversation_model.clear_action_state();
                         self.focused_pane = FocusedPane::Conversation;
@@ -859,6 +910,10 @@ impl App {
                     // Help (?) should be typed as a character
                     Action::Quit => {
                         return self.handle_action(action);
+                    },
+                    Action::AttachFile => {
+                        self.file_picker = Some(crate::ui::components::FilePicker::new());
+                        return None;
                     },
                     _ => {},
                 }
@@ -874,6 +929,44 @@ impl App {
             return self.handle_action(action);
         }
 
+        None
+    }
+
+    /// Handle key events while the file picker overlay is open.
+    fn handle_file_picker_key(&mut self, key: KeyEvent) -> Option<AppAction> {
+        use crate::ui::components::{FilePicker, FilePickerAction};
+        use crate::ui::keys::Action;
+        // Compute action before borrowing picker mutably, to satisfy the borrow checker.
+        let action = self.keymap.get_action(&key);
+        match action {
+            Some(Action::Up) => {
+                if let Some(picker) = self.file_picker.as_mut() {
+                    picker.select_previous();
+                }
+            },
+            Some(Action::Down) => {
+                if let Some(picker) = self.file_picker.as_mut() {
+                    picker.select_next();
+                }
+            },
+            Some(Action::CancelAction) => {
+                self.file_picker = None;
+            },
+            Some(Action::OpenChat | Action::SendMessage) => {
+                // Enter activates the current entry.
+                // Call activate() in its own scope so the mutable borrow on file_picker
+                // is dropped before we potentially reassign self.file_picker below.
+                let picker_result = self.file_picker.as_mut().map(FilePicker::activate);
+                if let Some(FilePickerAction::Selected(path)) = picker_result {
+                    self.conversation_model.set_pending_attachment(path);
+                    self.file_picker = None;
+                    self.conversation_model.input.set_focused(true);
+                    self.focused_pane = FocusedPane::Input;
+                }
+                // FilePickerAction::None means we just descended into a dir; do nothing extra.
+            },
+            _ => {},
+        }
         None
     }
 
@@ -1189,6 +1282,11 @@ impl App {
         // Render help overlay if visible
         if self.show_help {
             self.render_help_overlay(frame);
+        }
+
+        // Render file picker overlay if open
+        if let Some(picker) = &self.file_picker {
+            picker.render(frame);
         }
     }
 
@@ -1653,5 +1751,45 @@ mod tests {
         let debug = format!("{app:?}");
         assert!(debug.contains("App"));
         assert!(debug.contains("state"));
+    }
+
+    #[test]
+    fn test_esc_clears_staged_attachment_keeps_input_focus() {
+        let mut app = create_test_app();
+        app.state = AppState::Main;
+        app.focused_pane = FocusedPane::Input;
+        app.conversation_model.input.set_focused(true);
+
+        // Stage an attachment
+        app.conversation_model
+            .set_pending_attachment(std::path::PathBuf::from("/tmp/x.png"));
+        assert!(app.conversation_model.pending_attachment().is_some());
+
+        // Send Esc while a file is staged
+        let esc_key = crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        );
+        app.handle_key(esc_key);
+
+        // Attachment must be cleared
+        assert!(
+            app.conversation_model.pending_attachment().is_none(),
+            "first Esc should clear the staged attachment"
+        );
+        // Focus must remain on Input — NOT jump to Conversation
+        assert_eq!(
+            app.focused_pane,
+            FocusedPane::Input,
+            "first Esc must keep focus on the Input pane"
+        );
+
+        // A second Esc with no attachment should then unfocus the input
+        app.handle_key(esc_key);
+        assert_eq!(
+            app.focused_pane,
+            FocusedPane::Conversation,
+            "second Esc (no attachment) should move focus to Conversation"
+        );
     }
 }

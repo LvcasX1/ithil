@@ -191,10 +191,17 @@ impl<'a> MessageWidget<'a> {
                     format!("🎵 [Audio] {}", self.message.content.caption)
                 }
             },
-            MessageType::Document => self.message.content.document.as_ref().map_or_else(
-                || "📎 [Document]".to_string(),
-                |doc| format!("📎 [Document: {}]", doc.file_name),
-            ),
+            MessageType::Document => {
+                let mut doc_text = self.message.content.document.as_ref().map_or_else(
+                    || "📎 [Document]".to_string(),
+                    |doc| format!("📎 [Document: {}]", doc.file_name),
+                );
+                if !self.message.content.caption.is_empty() {
+                    doc_text.push(' ');
+                    doc_text.push_str(&self.message.content.caption);
+                }
+                doc_text
+            },
             MessageType::Sticker => self.message.content.sticker.as_ref().map_or_else(
                 || "[Sticker]".to_string(),
                 |sticker| format!("[Sticker: {}]", sticker.emoji),
@@ -414,6 +421,36 @@ mod tests {
         let widget = MessageWidget::new(&msg, "Grace".to_string());
 
         assert_eq!(widget.get_content_text(), "📷 [Photo 1920×1080]");
+    }
+
+    #[test]
+    fn test_content_text_for_document_without_caption() {
+        let msg = Message {
+            content: MessageContent {
+                content_type: MessageType::Document,
+                caption: String::new(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let widget = MessageWidget::new(&msg, "Grace".to_string());
+
+        assert_eq!(widget.get_content_text(), "📎 [Document]");
+    }
+
+    #[test]
+    fn test_content_text_for_document_with_caption() {
+        let msg = Message {
+            content: MessageContent {
+                content_type: MessageType::Document,
+                caption: "see attached".to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let widget = MessageWidget::new(&msg, "Grace".to_string());
+
+        assert_eq!(widget.get_content_text(), "📎 [Document] see attached");
     }
 
     #[test]
