@@ -14,11 +14,12 @@ use ratatui::{
 
 use crate::ui::styles::Styles;
 
-/// Result of activating the current selection or cancelling.
+/// Result of activating the current selection in the file picker.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilePickerAction {
+    /// Navigated or descended into a directory — nothing to report.
     None,
-    Cancelled,
+    /// User confirmed a file; contains the absolute path to the selected file.
     Selected(PathBuf),
 }
 
@@ -29,6 +30,10 @@ struct Entry {
     is_dir: bool,
 }
 
+/// Modal file browser overlay for selecting a file to attach.
+///
+/// Displays a navigable directory listing. Directories are listed before
+/// files. A `..` entry is prepended whenever a parent directory exists.
 #[derive(Debug)]
 pub struct FilePicker {
     current_dir: PathBuf,
@@ -37,6 +42,8 @@ pub struct FilePicker {
 }
 
 impl FilePicker {
+    /// Creates a new picker rooted at the user's home directory (falling back
+    /// to the current working directory).
     #[must_use]
     pub fn new() -> Self {
         let start = dirs::home_dir()
@@ -45,6 +52,7 @@ impl FilePicker {
         Self::with_dir(start)
     }
 
+    /// Creates a picker rooted at `dir` and loads its initial listing.
     #[must_use]
     pub fn with_dir(dir: PathBuf) -> Self {
         let mut picker = Self {
@@ -56,6 +64,7 @@ impl FilePicker {
         picker
     }
 
+    // Reads `current_dir` from disk and rebuilds `entries` (dirs first, then files).
     fn reload(&mut self) {
         let mut dirs: Vec<Entry> = Vec::new();
         let mut files: Vec<Entry> = Vec::new();
@@ -97,16 +106,23 @@ impl FilePicker {
         self.selected = 0;
     }
 
+    /// Moves the selection up by one row; clamps at the first entry.
     pub fn select_previous(&mut self) {
         self.selected = self.selected.saturating_sub(1);
     }
 
+    /// Moves the selection down by one row; clamps at the last entry.
     pub fn select_next(&mut self) {
         if !self.entries.is_empty() {
             self.selected = (self.selected + 1).min(self.entries.len() - 1);
         }
     }
 
+    /// Activates the currently highlighted entry.
+    ///
+    /// If the entry is a directory (including `..`), descends into it and
+    /// returns [`FilePickerAction::None`]. If it is a file, returns
+    /// [`FilePickerAction::Selected`] with the file's path.
     pub fn activate(&mut self) -> FilePickerAction {
         let Some(entry) = self.entries.get(self.selected) else {
             return FilePickerAction::None;
@@ -120,16 +136,19 @@ impl FilePicker {
         }
     }
 
+    /// Returns the display labels of all entries in the current directory listing.
     #[must_use]
     pub fn entry_names(&self) -> Vec<String> {
         self.entries.iter().map(|e| e.label.clone()).collect()
     }
 
+    /// Returns the zero-based index of the currently highlighted entry.
     #[must_use]
     pub const fn selected_index(&self) -> usize {
         self.selected
     }
 
+    /// Renders the file picker as a centered modal overlay on the given frame.
     pub fn render(&self, frame: &mut Frame) {
         let area = frame.area();
         let w = 60.min(area.width.saturating_sub(4));
@@ -223,7 +242,7 @@ mod tests {
         picker.select_next();
         match picker.activate() {
             FilePickerAction::Selected(p) => assert!(p.ends_with("nested.txt")),
-            other => panic!("expected Selected, got {other:?}"),
+            other @ FilePickerAction::None => panic!("expected Selected, got {other:?}"),
         }
     }
 
