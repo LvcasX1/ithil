@@ -64,7 +64,9 @@ Unreadable directories produce an empty list rather than an error/panic.
 
 ### App overlay — `src/ui/app.rs`
 
-- Add `file_picker: Option<FilePicker>` to `App`, following the existing modal-overlay pattern.
+- Add `file_picker: Option<FilePicker>` to `App`. There is no generic modal abstraction in the
+  codebase; this gates rendering and key handling the same way the existing `show_help: bool` /
+  `render_help_overlay` flow does, but holds the picker's own state instead of a bool.
 - When `Some`, the picker intercepts key events and renders on top of the main UI.
 - `Action::AttachFile` (when the conversation/input is focused) sets `file_picker = Some(..)`.
 - When the picker returns a file, store it in the conversation model's `pending_attachment` and
@@ -79,6 +81,9 @@ Unreadable directories produce an empty list rather than an error/panic.
 - `submit_input()` branches: if `pending_attachment.is_some()`, emit
   `ConversationAction::SendMessageWithAttachment(text, path, reply_to)`; otherwise emit the
   existing `SendMessage(text, reply_to)`. Clear the pending attachment after submit.
+- The current `submit_input()` returns `None` when the trimmed text is empty. That guard must
+  apply only when there is **no** pending attachment: a staged file with an empty caption is a
+  normal flow and must still send.
 - Esc precedence: if a `pending_attachment` is set, Esc clears it first (before clearing reply or
   edit state).
 - Render a one-line banner above the input when an attachment is pending:
@@ -104,6 +109,10 @@ pub async fn send_file(
     // map to domain Message exactly as send_message does
 }
 ```
+
+Like every method in `messages.rs`, `send_file` must start with the auth/peer preamble
+(`require_authorized`, resolve the peer ref) and, after sending, insert the resulting message into
+the cache the same way `send_message` does.
 
 `upload_file` returns `io::Error`; map it into `TelegramError` (add a variant or reuse an
 existing IO/wrapped variant as the codebase already does for other IO).
