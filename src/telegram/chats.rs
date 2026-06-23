@@ -491,6 +491,15 @@ pub(crate) fn grammers_message_to_message(msg: &grammers_client::message::Messag
                 String::new(),
                 None,
             ),
+            // A web page is a link preview attached to a text message. Render it
+            // as plain text so the URL stays visible and accessible, rather than
+            // hiding it behind a generic document placeholder.
+            grammers_client::media::Media::WebPage(_) => (
+                MessageType::Text,
+                msg.text().to_string(),
+                String::new(),
+                None,
+            ),
             // Game media type doesn't exist in grammers 0.9
             _ => (
                 MessageType::Document,

@@ -630,10 +630,10 @@ impl App {
 
     /// Handle opening media from a message.
     ///
-    /// Downloads the media if not already downloaded, then opens it with the system viewer.
+    /// Downloads the attachment if not already downloaded, then opens it with
+    /// the system viewer. Works for any attachment type, not just photos.
     async fn handle_open_media(&mut self, chat_id: i64, message_id: i64) {
         use crate::telegram::TelegramClient;
-        use crate::types::MessageType;
 
         // Get the message from cache
         let message = self
@@ -647,9 +647,16 @@ impl App {
             return;
         };
 
-        // Check if it's a photo message
-        if message.content.content_type != MessageType::Photo {
-            self.set_status_message("Selected message is not a photo".to_string());
+        // Messages without a downloadable attachment may still carry a link;
+        // open the first URL in the browser instead.
+        if !message.content.content_type.is_downloadable() {
+            if let Some(url) = crate::utils::first_url(&message.content.text) {
+                if let Err(e) = TelegramClient::open_url(&url).await {
+                    self.set_status_message(format!("Failed to open link: {e}"));
+                }
+            } else {
+                self.set_status_message("Selected message has no attachment or link".to_string());
+            }
             return;
         }
 
@@ -657,22 +664,22 @@ impl App {
         let media_dir = self.config.cache.media_directory.clone();
 
         // Download if needed and open
-        self.set_status_message("Downloading photo...".to_string());
+        self.set_status_message("Downloading attachment...".to_string());
 
         match self
             .telegram
-            .download_photo_if_needed(&message, &media_dir)
+            .download_media_if_needed(&message, &media_dir)
             .await
         {
             Ok(path) => {
                 self.clear_status_message();
                 // Open the file with system viewer
                 if let Err(e) = TelegramClient::open_media_file(&path).await {
-                    self.set_status_message(format!("Failed to open photo: {e}"));
+                    self.set_status_message(format!("Failed to open attachment: {e}"));
                 }
             },
             Err(e) => {
-                self.set_status_message(format!("Failed to download photo: {e}"));
+                self.set_status_message(format!("Failed to download attachment: {e}"));
             },
         }
     }

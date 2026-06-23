@@ -6,5 +6,5 @@
 mod formatting;
 mod time;
 
-pub use formatting::{format_file_size, truncate_string, word_wrap};
+pub use formatting::{first_url, format_file_size, truncate_string, word_wrap};
 pub use time::{format_duration, format_relative_time, format_timestamp};

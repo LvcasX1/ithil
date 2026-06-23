@@ -285,6 +285,25 @@ pub enum MessageType {
     Game,
 }
 
+impl MessageType {
+    /// Returns true if this message carries a downloadable file attachment
+    /// (photo, video, voice, audio, document, animation, sticker, video note).
+    #[must_use]
+    pub const fn is_downloadable(self) -> bool {
+        matches!(
+            self,
+            Self::Photo
+                | Self::Video
+                | Self::Voice
+                | Self::VideoNote
+                | Self::Audio
+                | Self::Document
+                | Self::Sticker
+                | Self::Animation
+        )
+    }
+}
+
 impl fmt::Display for MessageType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
