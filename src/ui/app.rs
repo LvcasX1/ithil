@@ -1236,15 +1236,13 @@ impl App {
                         let sender = self
                             .cache
                             .get_user(msg.sender_id)
-                            .map(|u| {
-                                format!("{} {}", u.first_name, u.last_name)
-                                    .trim()
-                                    .to_string()
-                            })
+                            .map(|u| u.get_display_name())
                             .filter(|n| !n.is_empty())
                             .or_else(|| self.cache.get_chat(update.chat_id).map(|c| c.title))
                             .unwrap_or_else(|| "New message".to_string());
                         let preview = msg.content.preview();
+                        // Reuse the chat-list preview length; notifications have no
+                        // dedicated setting yet.
                         let limit = self.config.ui.appearance.message_preview_length;
                         let preview = crate::utils::truncate_string(&preview, limit);
                         crate::utils::send_notification(
