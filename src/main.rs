@@ -119,7 +119,8 @@ async fn run_app(config: Config) -> Result<()> {
     crossterm::execute!(
         stdout,
         crossterm::terminal::EnterAlternateScreen,
-        crossterm::event::EnableMouseCapture
+        crossterm::event::EnableMouseCapture,
+        crossterm::event::EnableFocusChange
     )
     .context("Failed to set up terminal")?;
 
@@ -183,7 +184,8 @@ async fn run_app(config: Config) -> Result<()> {
     crossterm::execute!(
         terminal.backend_mut(),
         crossterm::terminal::LeaveAlternateScreen,
-        crossterm::event::DisableMouseCapture
+        crossterm::event::DisableMouseCapture,
+        crossterm::event::DisableFocusChange
     )
     .context("Failed to restore terminal")?;
 

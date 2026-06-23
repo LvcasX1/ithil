@@ -140,6 +140,7 @@ pub enum AppAction {
 ///
 /// This struct holds all application state including configuration,
 /// the Telegram client, cache, and UI state.
+#[allow(clippy::struct_excessive_bools)]
 pub struct App {
     /// Current application state
     pub state: AppState,
@@ -197,6 +198,10 @@ pub struct App {
 
     /// Active file picker overlay, when attaching a file.
     file_picker: Option<crate::ui::components::FilePicker>,
+
+    /// Whether the terminal is currently focused. Starts true so terminals
+    /// without focus reporting never produce spurious notifications.
+    terminal_focused: bool,
 }
 
 impl App {
@@ -258,6 +263,7 @@ impl App {
             status_message: None,
             status_bar,
             file_picker: None,
+            terminal_focused: true,
         }
     }
 
@@ -453,12 +459,17 @@ impl App {
                 _ = tick_interval.tick() => {
                     // Check for terminal events (non-blocking)
                     while event::poll(Duration::from_millis(0))? {
-                        if let Event::Key(key) = event::read()? {
-                            if key.kind == KeyEventKind::Press {
+                        match event::read()? {
+                            Event::FocusGained => self.terminal_focused = true,
+                            Event::FocusLost => self.terminal_focused = false,
+                            Event::Key(key)
+                                if key.kind == KeyEventKind::Press =>
+                            {
                                 if let Some(action) = self.handle_key(key) {
                                     self.handle_app_action(action).await;
                                 }
-                            }
+                            },
+                            _ => {}
                         }
                     }
 
