@@ -88,8 +88,8 @@ impl FilePicker {
             }
         }
 
-        dirs.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
-        files.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+        dirs.sort_by_key(|e| e.label.to_lowercase());
+        files.sort_by_key(|e| e.label.to_lowercase());
 
         let mut entries = Vec::with_capacity(dirs.len() + files.len() + 1);
         if let Some(parent) = self.current_dir.parent() {

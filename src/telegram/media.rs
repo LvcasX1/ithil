@@ -25,7 +25,9 @@ fn media_file_name(chat_id: i64, message_id: i64, media: &grammers_client::media
 
     match media {
         GMedia::Photo(_) => format!("photo_{chat_id}_{message_id}.jpg"),
-        GMedia::Document(doc) => document_file_name(chat_id, message_id, doc.name(), doc.mime_type()),
+        GMedia::Document(doc) => {
+            document_file_name(chat_id, message_id, doc.name(), doc.mime_type())
+        },
         _ => format!("media_{chat_id}_{message_id}.bin"),
     }
 }
