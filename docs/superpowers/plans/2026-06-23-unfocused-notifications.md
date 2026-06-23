@@ -278,14 +278,32 @@ git commit -m "feat(notify): add sanitize for terminal escape-injection guard"
 Pure, terminal-free gate. Tested as a truth table.
 
 **Files:**
+- Modify: `src/app/mod.rs` (re-export `NotificationConfig`)
 - Modify: `src/utils/notify.rs`
+
+- [ ] **Step 0: Expose `NotificationConfig` (required — else E0603)**
+
+`NotificationConfig` is `pub` but lives in the private `mod config;` of `src/app/mod.rs`, which currently only re-exports `Config`. `src/utils/notify.rs` cannot reach `crate::app::config::NotificationConfig`. Add the re-export to `src/app/mod.rs`:
+
+```rust
+pub use config::{Config, NotificationConfig};
+```
+
+(Replaces the existing `pub use config::Config;` line.) Then import it in `notify.rs` as `use crate::app::NotificationConfig;`.
+
+Commit:
+
+```bash
+git add src/app/mod.rs
+git commit -m "refactor(app): re-export NotificationConfig from app module"
+```
 
 - [ ] **Step 1: Add failing tests**
 
 Append to the `tests` module in `src/utils/notify.rs`:
 
 ```rust
-use crate::app::config::NotificationConfig;
+use crate::app::NotificationConfig;
 
 fn cfg(enabled: bool, desktop: bool, muted: Vec<i64>) -> NotificationConfig {
     NotificationConfig { enabled, sound: true, desktop, muted_chats: muted }
@@ -322,7 +340,7 @@ fn no_notify_when_chat_in_muted_list() {
 }
 ```
 
-> Confirm `NotificationConfig` field names/order against `src/app/config.rs` and adjust the struct literal if needed. If `NotificationConfig` is not constructible from this module's path, import via its actual path (e.g. `crate::app::config::NotificationConfig` or `crate::Config`-relative).
+> Field names/order confirmed against `src/app/config.rs`: `{ enabled, sound, desktop, muted_chats }`. Import path is `crate::app::NotificationConfig` (re-exported in Step 0).
 
 - [ ] **Step 2: Run test, verify it fails**
 
@@ -334,7 +352,7 @@ Expected: FAIL — `cannot find function should_notify`.
 Add to `src/utils/notify.rs` (above the tests module):
 
 ```rust
-use crate::app::config::NotificationConfig;
+use crate::app::NotificationConfig;
 
 /// Decide whether an incoming message should raise a notification.
 /// Pure — no terminal or I/O. The caller is responsible for the
@@ -354,7 +372,7 @@ pub fn should_notify(
 }
 ```
 
-> Ensure `NotificationConfig` is `pub` and reachable. If `config` module is private, make the type path correct (it is used as `config::NotificationConfig` in `config.rs`; expose as needed).
+> Reachability handled by Step 0 (`pub use config::NotificationConfig`).
 
 - [ ] **Step 4: Run test, verify pass**
 
