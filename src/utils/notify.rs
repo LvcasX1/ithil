@@ -1,5 +1,7 @@
 //! Terminal-native desktop notifications via the OSC 9 escape sequence.
 
+use std::io::Write;
+
 use crate::app::NotificationConfig;
 
 /// Max characters in a notification body before truncation.
@@ -65,6 +67,25 @@ pub fn should_notify(
         && cfg.desktop
         && !chat_muted
         && !cfg.muted_chats.contains(&chat_id)
+}
+
+/// Emit an OSC 9 desktop notification through the current terminal.
+///
+/// `text` is sanitized first. When `sound` is true a BEL is appended so
+/// terminals that map it to an alert will also chime. Best-effort: any
+/// I/O error is swallowed (a missed notification must never disrupt the UI).
+pub fn send_notification(text: &str, sound: bool) {
+    let body = sanitize(text);
+    if body.is_empty() {
+        return;
+    }
+    let mut seq = format!("\x1b]9;{body}\x07");
+    if sound {
+        seq.push('\x07');
+    }
+    let mut stdout = std::io::stdout();
+    let _ = stdout.write_all(seq.as_bytes());
+    let _ = stdout.flush();
 }
 
 #[cfg(test)]
