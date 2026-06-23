@@ -140,6 +140,8 @@ pub enum AppAction {
 ///
 /// This struct holds all application state including configuration,
 /// the Telegram client, cache, and UI state.
+// App tracks four independent UI/runtime flags (show_sidebar, show_help,
+// should_quit, terminal_focused); audit before adding a fifth.
 #[allow(clippy::struct_excessive_bools)]
 pub struct App {
     /// Current application state
@@ -1219,6 +1221,37 @@ impl App {
                 if let Some(msg) = update.message {
                     let msg = *msg;
                     self.cache.add_message(update.chat_id, msg.clone());
+                    // Notify the user if an incoming message arrived while the
+                    // terminal is unfocused (gated by config + per-chat mute).
+                    if !msg.is_outgoing
+                        && crate::utils::should_notify(
+                            self.terminal_focused,
+                            &self.config.notifications,
+                            update.chat_id,
+                            self.cache
+                                .get_chat(update.chat_id)
+                                .is_some_and(|c| c.is_muted),
+                        )
+                    {
+                        let sender = self
+                            .cache
+                            .get_user(msg.sender_id)
+                            .map(|u| {
+                                format!("{} {}", u.first_name, u.last_name)
+                                    .trim()
+                                    .to_string()
+                            })
+                            .filter(|n| !n.is_empty())
+                            .or_else(|| self.cache.get_chat(update.chat_id).map(|c| c.title))
+                            .unwrap_or_else(|| "New message".to_string());
+                        let preview = msg.content.preview();
+                        let limit = self.config.ui.appearance.message_preview_length;
+                        let preview = crate::utils::truncate_string(&preview, limit);
+                        crate::utils::send_notification(
+                            &format!("{sender}: {preview}"),
+                            self.config.notifications.sound,
+                        );
+                    }
                     // Update conversation view if this is the active chat
                     if is_selected_chat {
                         self.conversation_model.add_message(msg);
