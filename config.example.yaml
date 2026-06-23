@@ -49,7 +49,7 @@ ui:
 notifications:
   enabled: true
   sound: true
-  desktop: false
+  desktop: true
   muted_chats: []
 
 privacy:

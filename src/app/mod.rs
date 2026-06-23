@@ -8,5 +8,5 @@
 mod config;
 mod credentials;
 
-pub use config::Config;
+pub use config::{Config, NotificationConfig};
 pub use credentials::Credentials;

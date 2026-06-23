@@ -36,7 +36,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::types::{Chat, ChatType, MessageType, UserStatus};
+use crate::types::{Chat, ChatType, UserStatus};
 use crate::ui::styles::{colors, Styles};
 use crate::utils::{format_timestamp, truncate_string};
 
@@ -276,52 +276,7 @@ impl<'a> ChatItemBuilder<'a> {
             String::new()
         };
 
-        match msg.content.content_type {
-            MessageType::Text => preview.push_str(&msg.content.text),
-            MessageType::Photo => {
-                preview.push_str("📷 Photo");
-                if !msg.content.caption.is_empty() {
-                    preview.push_str(": ");
-                    preview.push_str(&msg.content.caption);
-                }
-            },
-            MessageType::Video => {
-                preview.push_str("🎬 Video");
-                if !msg.content.caption.is_empty() {
-                    preview.push_str(": ");
-                    preview.push_str(&msg.content.caption);
-                }
-            },
-            MessageType::Voice => preview.push_str("🎤 Voice message"),
-            MessageType::VideoNote => preview.push_str("📹 Video message"),
-            MessageType::Audio => preview.push_str("🎵 Audio"),
-            MessageType::Document => {
-                preview.push_str("📎 Document");
-                if let Some(ref doc) = msg.content.document {
-                    if !doc.file_name.is_empty() {
-                        preview.push_str(": ");
-                        preview.push_str(&doc.file_name);
-                    }
-                }
-                if !msg.content.caption.is_empty() {
-                    preview.push_str(": ");
-                    preview.push_str(&msg.content.caption);
-                }
-            },
-            MessageType::Sticker => preview.push_str("🎨 Sticker"),
-            MessageType::Animation => preview.push_str("GIF"),
-            MessageType::Location => preview.push_str("📍 Location"),
-            MessageType::Contact => preview.push_str("👤 Contact"),
-            MessageType::Poll => {
-                preview.push_str("📊 Poll");
-                if let Some(ref poll) = msg.content.poll {
-                    preview.push_str(": ");
-                    preview.push_str(&poll.question);
-                }
-            },
-            MessageType::Venue => preview.push_str("📍 Venue"),
-            MessageType::Game => preview.push_str("🎮 Game"),
-        }
+        preview.push_str(&msg.content.preview());
 
         preview
     }
@@ -404,7 +359,7 @@ impl<'a> ChatItemComponent<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Message, MessageContent};
+    use crate::types::{Message, MessageContent, MessageType};
     use chrono::Utc;
 
     fn create_test_chat() -> Chat {

@@ -319,7 +319,7 @@ impl Default for NotificationConfig {
         Self {
             enabled: true,
             sound: true,
-            desktop: false,
+            desktop: true,
             muted_chats: Vec::new(),
         }
     }
@@ -602,5 +602,10 @@ mod tests {
             assert!(expanded.starts_with(&home));
             assert!(expanded.ends_with("test/path"));
         }
+    }
+
+    #[test]
+    fn notification_desktop_defaults_on() {
+        assert!(NotificationConfig::default().desktop);
     }
 }

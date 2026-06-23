@@ -140,6 +140,9 @@ pub enum AppAction {
 ///
 /// This struct holds all application state including configuration,
 /// the Telegram client, cache, and UI state.
+// App tracks four independent UI/runtime flags (show_sidebar, show_help,
+// should_quit, terminal_focused); audit before adding a fifth.
+#[allow(clippy::struct_excessive_bools)]
 pub struct App {
     /// Current application state
     pub state: AppState,
@@ -197,6 +200,10 @@ pub struct App {
 
     /// Active file picker overlay, when attaching a file.
     file_picker: Option<crate::ui::components::FilePicker>,
+
+    /// Whether the terminal is currently focused. Starts true so terminals
+    /// without focus reporting never produce spurious notifications.
+    terminal_focused: bool,
 }
 
 impl App {
@@ -258,6 +265,7 @@ impl App {
             status_message: None,
             status_bar,
             file_picker: None,
+            terminal_focused: true,
         }
     }
 
@@ -453,12 +461,17 @@ impl App {
                 _ = tick_interval.tick() => {
                     // Check for terminal events (non-blocking)
                     while event::poll(Duration::from_millis(0))? {
-                        if let Event::Key(key) = event::read()? {
-                            if key.kind == KeyEventKind::Press {
+                        match event::read()? {
+                            Event::FocusGained => self.terminal_focused = true,
+                            Event::FocusLost => self.terminal_focused = false,
+                            Event::Key(key)
+                                if key.kind == KeyEventKind::Press =>
+                            {
                                 if let Some(action) = self.handle_key(key) {
                                     self.handle_app_action(action).await;
                                 }
-                            }
+                            },
+                            _ => {}
                         }
                     }
 
@@ -1208,6 +1221,35 @@ impl App {
                 if let Some(msg) = update.message {
                     let msg = *msg;
                     self.cache.add_message(update.chat_id, msg.clone());
+                    // Notify the user if an incoming message arrived while the
+                    // terminal is unfocused (gated by config + per-chat mute).
+                    if !msg.is_outgoing
+                        && crate::utils::should_notify(
+                            self.terminal_focused,
+                            &self.config.notifications,
+                            update.chat_id,
+                            self.cache
+                                .get_chat(update.chat_id)
+                                .is_some_and(|c| c.is_muted),
+                        )
+                    {
+                        let sender = self
+                            .cache
+                            .get_user(msg.sender_id)
+                            .map(|u| u.get_display_name())
+                            .filter(|n| !n.is_empty())
+                            .or_else(|| self.cache.get_chat(update.chat_id).map(|c| c.title))
+                            .unwrap_or_else(|| "New message".to_string());
+                        let preview = msg.content.preview();
+                        // Reuse the chat-list preview length; notifications have no
+                        // dedicated setting yet.
+                        let limit = self.config.ui.appearance.message_preview_length;
+                        let preview = crate::utils::truncate_string(&preview, limit);
+                        crate::utils::send_notification(
+                            &format!("{sender}: {preview}"),
+                            self.config.notifications.sound,
+                        );
+                    }
                     // Update conversation view if this is the active chat
                     if is_selected_chat {
                         self.conversation_model.add_message(msg);
