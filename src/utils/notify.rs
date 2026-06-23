@@ -19,7 +19,7 @@ fn is_unwanted(ch: char) -> bool {
             '\u{200E}' | '\u{200F}'           // LRM / RLM
             | '\u{202A}'..='\u{202E}'         // embeddings + overrides
             | '\u{2066}'..='\u{2069}'         // isolates
-            | '\u{FEFF}')                     // BOM / ZWNBSP
+            | '\u{FEFF}') // BOM / ZWNBSP
 }
 
 /// Sanitize untrusted message content for safe display in a notification.
@@ -62,11 +62,7 @@ pub fn should_notify(
     chat_id: i64,
     chat_muted: bool,
 ) -> bool {
-    !focused
-        && cfg.enabled
-        && cfg.desktop
-        && !chat_muted
-        && !cfg.muted_chats.contains(&chat_id)
+    !focused && cfg.enabled && cfg.desktop && !chat_muted && !cfg.muted_chats.contains(&chat_id)
 }
 
 /// Build the OSC 9 escape sequence for `text`, or `None` if the sanitized
@@ -141,7 +137,12 @@ mod tests {
     }
 
     fn cfg(enabled: bool, desktop: bool, muted: Vec<i64>) -> NotificationConfig {
-        NotificationConfig { enabled, sound: true, desktop, muted_chats: muted }
+        NotificationConfig {
+            enabled,
+            sound: true,
+            desktop,
+            muted_chats: muted,
+        }
     }
 
     #[test]
@@ -181,12 +182,18 @@ mod tests {
 
     #[test]
     fn osc9_wraps_body_without_sound() {
-        assert_eq!(osc9_sequence("hi", false), Some("\x1b]9;hi\x07".to_string()));
+        assert_eq!(
+            osc9_sequence("hi", false),
+            Some("\x1b]9;hi\x07".to_string())
+        );
     }
 
     #[test]
     fn osc9_appends_extra_bel_with_sound() {
-        assert_eq!(osc9_sequence("hi", true), Some("\x1b]9;hi\x07\x07".to_string()));
+        assert_eq!(
+            osc9_sequence("hi", true),
+            Some("\x1b]9;hi\x07\x07".to_string())
+        );
     }
 
     #[test]
