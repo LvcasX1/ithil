@@ -69,20 +69,33 @@ pub fn should_notify(
         && !cfg.muted_chats.contains(&chat_id)
 }
 
-/// Emit an OSC 9 desktop notification through the current terminal.
-///
-/// `text` is sanitized first. When `sound` is true a BEL is appended so
-/// terminals that map it to an alert will also chime. Best-effort: any
-/// I/O error is swallowed (a missed notification must never disrupt the UI).
-pub fn send_notification(text: &str, sound: bool) {
+/// Build the OSC 9 escape sequence for `text`, or `None` if the sanitized
+/// body is empty. Pure — no I/O, so it is unit-testable.
+fn osc9_sequence(text: &str, sound: bool) -> Option<String> {
     let body = sanitize(text);
     if body.is_empty() {
-        return;
+        return None;
     }
     let mut seq = format!("\x1b]9;{body}\x07");
     if sound {
         seq.push('\x07');
     }
+    Some(seq)
+}
+
+/// Emit an OSC 9 desktop notification through the current terminal.
+///
+/// `text` is sanitized first. When `sound` is true a BEL is appended so
+/// terminals that map it to an alert will also chime. Best-effort: any
+/// I/O error is swallowed (a missed notification must never disrupt the UI).
+// Note: the sequence is written to stdout while the app is in the alternate
+// screen. The targeted terminals (iTerm2, kitty, WezTerm, Ghostty) honor OSC 9
+// there, but some emulators only act on the primary screen — a future
+// enhancement could write to /dev/tty instead.
+pub fn send_notification(text: &str, sound: bool) {
+    let Some(seq) = osc9_sequence(text, sound) else {
+        return;
+    };
     let mut stdout = std::io::stdout();
     let _ = stdout.write_all(seq.as_bytes());
     let _ = stdout.flush();
@@ -159,5 +172,27 @@ mod tests {
     #[test]
     fn no_notify_when_chat_in_muted_list() {
         assert!(!should_notify(false, &cfg(true, true, vec![42]), 42, false));
+    }
+
+    #[test]
+    fn osc9_none_when_empty_after_sanitize() {
+        assert_eq!(osc9_sequence("\x1b\x07", false), None);
+    }
+
+    #[test]
+    fn osc9_wraps_body_without_sound() {
+        assert_eq!(osc9_sequence("hi", false), Some("\x1b]9;hi\x07".to_string()));
+    }
+
+    #[test]
+    fn osc9_appends_extra_bel_with_sound() {
+        assert_eq!(osc9_sequence("hi", true), Some("\x1b]9;hi\x07\x07".to_string()));
+    }
+
+    #[test]
+    fn osc9_sanitizes_injection() {
+        let s = osc9_sequence("a\x1b]9;evil\x07b", false).unwrap();
+        // exactly one OSC opener (our own), none from the payload
+        assert_eq!(s.matches("\x1b]9;").count(), 1);
     }
 }
