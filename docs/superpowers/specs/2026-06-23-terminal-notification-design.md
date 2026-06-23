@@ -19,11 +19,16 @@ notification facility (OSC 9 escape sequence). No external desktop-notification 
 
 ## Background / current state
 
-- Incoming messages: `src/telegram/updates.rs::handle_update` matches
-  `GrammersUpdate::NewMessage(msg) if !msg.outgoing()` and emits `UpdateType::NewMessage`.
-  Outgoing messages are a separate arm, so incoming-only is already guaranteed upstream.
-- The app consumes updates in `src/ui/app.rs::process_updates_async` (~line 1166), where the
-  `UpdateType::NewMessage` arm runs. `selected_chat_id` holds the currently open chat.
+- `src/telegram/updates.rs::handle_update` has two arms that BOTH emit `UpdateType::NewMessage`:
+  the incoming arm (`NewMessage(msg) if !msg.outgoing()`) and the outgoing-confirmation arm
+  (`NewMessage(msg) if msg.outgoing()`). They collapse to the same `UpdateType`, so the UI-side
+  `NewMessage` handler fires for the user's own sent messages too. The trigger MUST therefore
+  guard on `!msg.is_outgoing` itself (`Message.is_outgoing: bool`, types/mod.rs:720) — incoming
+  is NOT guaranteed by the time the update reaches the UI.
+- The app consumes updates in two methods that both delegate to `App::handle_update`
+  (`src/ui/app.rs`, a synchronous `pub fn` at ~line 1203): `process_updates` (async, ~1164) and
+  `process_updates_sync` (~1150). The `UpdateType::NewMessage` match arm lives inside
+  `handle_update` (~1207), not in the collectors. `selected_chat_id` holds the open chat.
 - The live event loop is `App::run_async_with_connection`. It reads terminal events with
   `event::read()` and currently only matches `Event::Key`. Mouse capture is enabled in
   `main.rs`; **focus reporting is not**.
@@ -42,15 +47,22 @@ notification facility (OSC 9 escape sequence). No external desktop-notification 
   terminals without focus reporting never emit `FocusLost`, so the value stays `true` and the
   app never produces spurious notifications. The feature is silently inert on unsupported
   terminals rather than misfiring.
-- `run_async_with_connection`: add event arms —
+- `run_async_with_connection`: the loop currently reads events with
+  `if let Event::Key(key) = event::read()?`. Convert that to a `match event::read()?` so focus
+  events can be handled alongside keys:
   - `Event::FocusGained` → `self.terminal_focused = true`
   - `Event::FocusLost`  → `self.terminal_focused = false`
-  - Neither requires a redraw.
+  - `Event::Key(key)` → existing key handling.
+  - Neither focus arm requires a redraw.
 
 ### 2. Notification emit — `src/utils/notify.rs` (new module)
 
 - `pub fn send_notification(text: &str, sound: bool)`:
   - Build the escape string `\x1b]9;{sanitized}\x07`. If `sound`, append a BEL (`\x07`).
+  - Note: ithil renders in the alternate screen, so this escape interleaves with Ratatui's
+    draw cycle on the same stdout. OSC 9 is a self-contained, cursor-neutral sequence; emitting
+    it between frames is safe and does not corrupt the rendered UI. The manual iTerm2/kitty test
+    is the regression guard for this interleave.
   - **Sanitize** `text` before writing (security: message content is untrusted Telegram input
     going straight to the terminal):
     - Strip ESC (`\x1b`), BEL (`\x07`), and other C0 control characters.
@@ -68,9 +80,15 @@ notification facility (OSC 9 escape sequence). No external desktop-notification 
 
 ### 4. Trigger wiring
 
-- In `process_updates_async`, `UpdateType::NewMessage` arm: when `should_notify(...)` is true,
-  format `"{sender}: {preview}"` and call `send_notification(text, cfg.sound)`.
-  - Sender: chat title / sender name from the message.
+- In `App::handle_update` (covers both the async and sync collector paths), inside the
+  `UpdateType::NewMessage` arm where `msg` is already destructured: fire only when
+  `!msg.is_outgoing` AND `should_notify(...)` is true, then format `"{sender}: {preview}"` and
+  call `send_notification(text, cfg.sound)`.
+  - `!msg.is_outgoing` guard is REQUIRED — the same `UpdateType::NewMessage` also carries the
+    user's own outgoing-message confirmations (see Background).
+  - Sender: `Message` has no name field — resolve via cache. Prefer
+    `cache.get_user(msg.sender_id)` (first/last name) for the human sender; fall back to
+    `cache.get_chat(chat_id).title` (e.g. group/channel name) when no user is found.
   - Preview: message text truncated using existing `appearance.message_preview_length`.
   - `chat_muted` derived from the cached `Chat.is_muted` for `chat_id`.
 
