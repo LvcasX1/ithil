@@ -647,9 +647,16 @@ impl App {
             return;
         };
 
-        // Only messages with a downloadable attachment can be opened
+        // Messages without a downloadable attachment may still carry a link;
+        // open the first URL in the browser instead.
         if !message.content.content_type.is_downloadable() {
-            self.set_status_message("Selected message has no attachment".to_string());
+            if let Some(url) = crate::utils::first_url(&message.content.text) {
+                if let Err(e) = TelegramClient::open_url(&url).await {
+                    self.set_status_message(format!("Failed to open link: {e}"));
+                }
+            } else {
+                self.set_status_message("Selected message has no attachment or link".to_string());
+            }
             return;
         }
 

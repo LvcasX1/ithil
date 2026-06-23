@@ -158,6 +158,28 @@ pub fn format_file_size(bytes: i64) -> String {
     }
 }
 
+/// Returns the first URL found in a text, if any.
+///
+/// Recognises `http://` and `https://` links, and bare `www.` hosts (which are
+/// returned with an `https://` scheme prepended). Surrounding brackets and
+/// trailing sentence punctuation are stripped so the URL stays valid.
+#[must_use]
+pub fn first_url(text: &str) -> Option<String> {
+    text.split_whitespace().find_map(|token| {
+        let token = token.trim_start_matches(|c| "([{<\"'`".contains(c));
+        let token = token.trim_end_matches(|c| ")]}>\"'`.,;:!?".contains(c));
+
+        if token.starts_with("http://") || token.starts_with("https://") {
+            Some(token.to_string())
+        } else {
+            token
+                .strip_prefix("www.")
+                .filter(|host| !host.is_empty())
+                .map(|host| format!("https://www.{host}"))
+        }
+    })
+}
+
 /// Helper to format float sizes with minimal decimal places.
 fn format_float_size(value: f64, unit: &str) -> String {
     if (value - value.round()).abs() < 0.05 {
@@ -170,6 +192,48 @@ fn format_float_size(value: f64, unit: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod first_url_tests {
+        use super::*;
+
+        #[test]
+        fn finds_https_in_sentence() {
+            assert_eq!(
+                first_url("check this https://example.com cool"),
+                Some("https://example.com".to_string())
+            );
+        }
+
+        #[test]
+        fn strips_trailing_punctuation_and_brackets() {
+            assert_eq!(
+                first_url("see (https://example.com/path)."),
+                Some("https://example.com/path".to_string())
+            );
+        }
+
+        #[test]
+        fn prepends_scheme_to_bare_www() {
+            assert_eq!(
+                first_url("go to www.example.com now"),
+                Some("https://www.example.com".to_string())
+            );
+        }
+
+        #[test]
+        fn returns_first_of_many() {
+            assert_eq!(
+                first_url("http://a.com and https://b.com"),
+                Some("http://a.com".to_string())
+            );
+        }
+
+        #[test]
+        fn none_when_no_url() {
+            assert_eq!(first_url("just plain text, no link"), None);
+            assert_eq!(first_url("www."), None);
+        }
+    }
 
     mod truncate_tests {
         use super::*;

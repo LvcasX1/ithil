@@ -250,6 +250,33 @@ impl TelegramClient {
 
         Ok(())
     }
+
+    /// Opens a URL with the system's default browser.
+    ///
+    /// On macOS this uses `open`, on Linux `xdg-open`, and on Windows `start`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the open command cannot be spawned.
+    #[allow(clippy::unused_async)]
+    pub async fn open_url(url: &str) -> Result<(), TelegramError> {
+        info!("Opening URL: {}", url);
+
+        #[cfg(target_os = "macos")]
+        let result = tokio::process::Command::new("open").arg(url).spawn();
+
+        #[cfg(target_os = "linux")]
+        let result = tokio::process::Command::new("xdg-open").arg(url).spawn();
+
+        #[cfg(target_os = "windows")]
+        let result = tokio::process::Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn();
+
+        result.map_err(|e| TelegramError::Io(e.to_string()))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
