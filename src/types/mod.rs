@@ -701,6 +701,61 @@ pub struct MessageContent {
     pub document: Option<Box<Document>>,
 }
 
+impl MessageContent {
+    /// Human-readable one-line preview of this message's body (no sender prefix).
+    #[must_use]
+    pub fn preview(&self) -> String {
+        let mut preview = String::new();
+        match self.content_type {
+            MessageType::Text => preview.push_str(&self.text),
+            MessageType::Photo => {
+                preview.push_str("📷 Photo");
+                if !self.caption.is_empty() {
+                    preview.push_str(": ");
+                    preview.push_str(&self.caption);
+                }
+            },
+            MessageType::Video => {
+                preview.push_str("🎬 Video");
+                if !self.caption.is_empty() {
+                    preview.push_str(": ");
+                    preview.push_str(&self.caption);
+                }
+            },
+            MessageType::Voice => preview.push_str("🎤 Voice message"),
+            MessageType::VideoNote => preview.push_str("📹 Video message"),
+            MessageType::Audio => preview.push_str("🎵 Audio"),
+            MessageType::Document => {
+                preview.push_str("📎 Document");
+                if let Some(ref doc) = self.document {
+                    if !doc.file_name.is_empty() {
+                        preview.push_str(": ");
+                        preview.push_str(&doc.file_name);
+                    }
+                }
+                if !self.caption.is_empty() {
+                    preview.push_str(": ");
+                    preview.push_str(&self.caption);
+                }
+            },
+            MessageType::Sticker => preview.push_str("🎨 Sticker"),
+            MessageType::Animation => preview.push_str("GIF"),
+            MessageType::Location => preview.push_str("📍 Location"),
+            MessageType::Contact => preview.push_str("👤 Contact"),
+            MessageType::Poll => {
+                preview.push_str("📊 Poll");
+                if let Some(ref poll) = self.poll {
+                    preview.push_str(": ");
+                    preview.push_str(&poll.question);
+                }
+            },
+            MessageType::Venue => preview.push_str("📍 Venue"),
+            MessageType::Game => preview.push_str("🎮 Game"),
+        }
+        preview
+    }
+}
+
 /// Represents a Telegram message.
 #[derive(Debug, Clone, Default)]
 pub struct Message {
@@ -986,6 +1041,39 @@ mod tests {
                 ..Default::default()
             };
             assert_eq!(progress.get_eta(), Duration::ZERO);
+        }
+    }
+
+    mod message_content_preview_tests {
+        use super::*;
+
+        #[test]
+        fn message_content_preview_text() {
+            let c = MessageContent {
+                content_type: MessageType::Text,
+                text: "hello world".to_string(),
+                ..Default::default()
+            };
+            assert_eq!(c.preview(), "hello world");
+        }
+
+        #[test]
+        fn message_content_preview_photo_with_caption() {
+            let c = MessageContent {
+                content_type: MessageType::Photo,
+                caption: "beach".to_string(),
+                ..Default::default()
+            };
+            assert_eq!(c.preview(), "📷 Photo: beach");
+        }
+
+        #[test]
+        fn message_content_preview_voice_no_caption() {
+            let c = MessageContent {
+                content_type: MessageType::Voice,
+                ..Default::default()
+            };
+            assert_eq!(c.preview(), "🎤 Voice message");
         }
     }
 
