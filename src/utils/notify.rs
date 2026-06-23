@@ -1,5 +1,7 @@
 //! Terminal-native desktop notifications via the OSC 9 escape sequence.
 
+use crate::app::NotificationConfig;
+
 /// Max characters in a notification body before truncation.
 const MAX_LEN: usize = 120;
 
@@ -48,6 +50,23 @@ pub fn sanitize(text: &str) -> String {
     }
 }
 
+/// Decide whether an incoming message should raise a notification.
+/// Pure — no terminal or I/O. The caller is responsible for the
+/// `!msg.is_outgoing` check (see plan Task 5/Task 7).
+#[must_use]
+pub fn should_notify(
+    focused: bool,
+    cfg: &NotificationConfig,
+    chat_id: i64,
+    chat_muted: bool,
+) -> bool {
+    !focused
+        && cfg.enabled
+        && cfg.desktop
+        && !chat_muted
+        && !cfg.muted_chats.contains(&chat_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -85,5 +104,39 @@ mod tests {
         let s = sanitize("Alice: \u{202E}reversed");
         assert!(!s.contains('\u{202E}'));
         assert_eq!(s, "Alice: reversed");
+    }
+
+    fn cfg(enabled: bool, desktop: bool, muted: Vec<i64>) -> NotificationConfig {
+        NotificationConfig { enabled, sound: true, desktop, muted_chats: muted }
+    }
+
+    #[test]
+    fn notifies_when_unfocused_enabled_desktop_unmuted() {
+        assert!(should_notify(false, &cfg(true, true, vec![]), 42, false));
+    }
+
+    #[test]
+    fn no_notify_when_focused() {
+        assert!(!should_notify(true, &cfg(true, true, vec![]), 42, false));
+    }
+
+    #[test]
+    fn no_notify_when_disabled() {
+        assert!(!should_notify(false, &cfg(false, true, vec![]), 42, false));
+    }
+
+    #[test]
+    fn no_notify_when_desktop_off() {
+        assert!(!should_notify(false, &cfg(true, false, vec![]), 42, false));
+    }
+
+    #[test]
+    fn no_notify_when_chat_muted_flag() {
+        assert!(!should_notify(false, &cfg(true, true, vec![]), 42, true));
+    }
+
+    #[test]
+    fn no_notify_when_chat_in_muted_list() {
+        assert!(!should_notify(false, &cfg(true, true, vec![42]), 42, false));
     }
 }
